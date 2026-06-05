@@ -31,9 +31,12 @@ export class ConversationSession {
     this.messages = [this.buildSystemPrompt(scene, correctionMode)];
   }
 
-  /** 添加用户消息 */
+  private static readonly MAX_TURNS = 20;
+
+  /** 添加用户消息（超过 20 轮则截断旧消息） */
   addUserMessage(text: string): void {
     this.messages.push({ role: 'user', content: text });
+    this.trimHistory();
   }
 
   /** 移除最后一条 assistant 消息（打断后去除截断回复） */
@@ -56,6 +59,25 @@ export class ConversationSession {
   /** 统计对话轮数（user+assistant 为一轮） */
   get turnCount(): number {
     return this.messages.filter((m) => m.role === 'user').length;
+  }
+
+  /** 截断旧消息，保留 System Prompt + 最近 MAX_TURNS 轮 */
+  private trimHistory(): void {
+    const userCount = this.messages.filter((m) => m.role === 'user').length;
+    if (userCount <= ConversationSession.MAX_TURNS) return;
+
+    const systemMsg = this.messages.find((m) => m.role === 'system');
+    // 跳过 System Prompt，只计 user 消息，保留最后 MAX_TURNS 轮
+    let keepFrom = 0;
+    let userSeen = 0;
+    const skip = userCount - ConversationSession.MAX_TURNS;
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].role === 'user') userSeen++;
+      if (userSeen > skip) { keepFrom = i; break; }
+    }
+    this.messages = systemMsg
+      ? [systemMsg, ...this.messages.slice(keepFrom).filter((m) => m.role !== 'system')]
+      : this.messages.slice(keepFrom);
   }
 
   // ---- System Prompt ----
