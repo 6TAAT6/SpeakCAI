@@ -8,6 +8,8 @@ import { DeepSeekLLM } from './llm.ts';
 import type { LLMConfig } from './llm.ts';
 import { XunfeiTTS } from './tts.ts';
 import type { TTSConfig } from './tts.ts';
+import { XunfeiISE } from './pronounce.ts';
+import type { ISEConfig } from './pronounce.ts';
 
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
@@ -27,6 +29,12 @@ const getTTSConfig = (): TTSConfig => ({
   apiSecret: process.env.XUNFEI_API_SECRET || '',
   voiceName: 'catherine', // 英文女声-Catherine
   speed: 50,
+});
+
+const getISEConfig = (): ISEConfig => ({
+  appId: process.env.XUNFEI_APP_ID || '',
+  apiKey: process.env.XUNFEI_API_KEY || '',
+  apiSecret: process.env.XUNFEI_API_SECRET || '',
 });
 
 function asrConfigured(): boolean {
@@ -52,6 +60,8 @@ export class WSServer {
   // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
   private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
   private ttsMap: Map<WebSocket, XunfeiTTS> = new Map();
+  // 每个客户端缓冲一句话的音频帧 + 文本，用于发音评测
+  private iseBuffer: Map<WebSocket, { audio: Buffer[]; text: string }> = new Map();
 
   constructor(private port: number) {}
 
@@ -178,6 +188,7 @@ export class WSServer {
     if (!asr) {
       const pending: Buffer[] = [];
       this.pendingAudio.set(ws, pending);
+      this.iseBuffer.set(ws, { audio: [], text: '' });
 
       asr = new XunfeiASR(getASRConfig(), {
         onReady: () => {
@@ -198,10 +209,14 @@ export class WSServer {
           console.log(`✅ final: "${text}"`);
           this.send(ws, { type: 'asr_final', text });
           this.handleUserInput(ws, text);
+          // 记录最后一句文本，停止时统一评测
+          const ise = this.iseBuffer.get(ws);
+          if (ise) ise.text = text;
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
           this.pendingAudio.delete(ws);
+          this.iseBuffer.delete(ws);
         },
       });
       asr.connect();
@@ -209,6 +224,10 @@ export class WSServer {
     }
 
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
+    // 缓冲音频帧供发音评测
+    const ise = this.iseBuffer.get(ws);
+    if (ise) ise.audio.push(buffer);
+
     const pending = this.pendingAudio.get(ws);
     if (pending) {
       pending.push(buffer);
@@ -280,6 +299,33 @@ export class WSServer {
     });
   }
 
+  // ---- 发音评测 → 讯飞 ISE ----
+  private evaluatePronounce(ws: WebSocket, text: string): void {
+    console.log(`🔊 ISE evaluate: text="${text.slice(0, 30)}"`);
+    const cfg = getISEConfig();
+    if (!cfg.appId || cfg.appId === 'your_app_id') { console.log('  -> skip: no ISE config'); return; }
+    const buf = this.iseBuffer.get(ws);
+    if (!buf || buf.audio.length === 0) { console.log('  -> skip: no audio buffer'); return; }
+    const audio = Buffer.concat(buf.audio);
+    console.log(`  -> audio: ${audio.length} bytes`);
+    this.iseBuffer.set(ws, { audio: [], text: '' });
+
+    const ise = new XunfeiISE(cfg);
+    ise.evaluate(text, audio, {
+      onResult: (result) => {
+        this.send(ws, {
+          type: 'pronounce_result',
+          totalScore: result.totalScore,
+          accuracyScore: result.accuracyScore,
+          fluencyScore: result.fluencyScore,
+          integrityScore: result.integrityScore,
+          weakPhones: result.weakPhones,
+        });
+      },
+      onError: () => { /* 评测失败不影响对话 */ },
+    });
+  }
+
   // ---- 打断（仅影响当前客户端）----
   private handleInterrupt(ws: WebSocket): void {
     // 移除打断导致的截断 assistant 消息
@@ -293,11 +339,8 @@ export class WSServer {
     // 中断当前 TTS 合成
     this.ttsMap.get(ws)?.abort();
 
-    // 重置当前客户端的 ASR
-    const asr = this.asrMap.get(ws);
-    if (asr) {
-      asr.end();
-    }
+    // 重置 ASR（cleanupASR 会触发发音评测）
+    this.cleanupASR(ws);
   }
 
   // ---- 继续对话（打断后，复用已有上下文重新生成）----
@@ -331,6 +374,14 @@ export class WSServer {
       asr.end();
       asr.disconnect();
       this.asrMap.delete(ws);
+    }
+    // 停止录音时触发发音评测
+    const buf = this.iseBuffer.get(ws);
+    console.log(`🧹 cleanupASR: iseBuf=${!!buf}, audio=${buf?.audio.length || 0}, text="${(buf?.text || '').slice(0, 20)}"`);
+    if (buf && buf.audio.length > 0 && buf.text) {
+      this.evaluatePronounce(ws, buf.text);
+    } else {
+      console.log('  -> skip ISE: 缺少音频或文本');
     }
   }
 

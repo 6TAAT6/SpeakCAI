@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
-interface Turn { role: 'user' | 'ai'; text: string }
+interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number }
 
 export function App() {
   const { status, messages, lastMessage } = useWebSocket(getWsUrl());
@@ -105,6 +105,23 @@ export function App() {
         setInterrupted(false);
         break;
       }
+      case 'pronounce_result':
+        setTurns((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'user') {
+              const copy = [...prev];
+              copy[i] = {
+                ...copy[i],
+                score: lastMessage.totalScore,
+                accuracy: lastMessage.accuracyScore,
+                fluency: lastMessage.fluencyScore,
+              };
+              return copy;
+            }
+          }
+          return prev;
+        });
+        break;
       case 'tts_audio':
         setTtsPlaying(true);
         if (lastMessage.chunkIndex === 0) {
@@ -168,6 +185,7 @@ export function App() {
 
   const handleRecordToggle = useCallback(async () => {
     if (isRecording) {
+      messagesRef.current.send({ type: 'interrupt' });
       stop();
       setFrameCount(0);
       setPartialText('');
@@ -216,7 +234,14 @@ export function App() {
         {/* 已完成对话 — 按时间线交替显示 */}
         {turns.map((t, i) => (
           <div key={i} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
-            <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+            <div className="bubble-header">
+              <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+              {t.score !== undefined && (
+                <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
+                  {t.score}分
+                </span>
+              )}
+            </div>
             <p>{t.text}</p>
           </div>
         ))}
