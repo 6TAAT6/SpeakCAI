@@ -301,11 +301,13 @@ export class WSServer {
 
   // ---- 发音评测 → 讯飞 ISE ----
   private evaluatePronounce(ws: WebSocket, text: string): void {
+    console.log(`🔊 ISE evaluate: text="${text.slice(0, 30)}"`);
     const cfg = getISEConfig();
-    if (!cfg.appId || cfg.appId === 'your_app_id') return;
+    if (!cfg.appId || cfg.appId === 'your_app_id') { console.log('  -> skip: no ISE config'); return; }
     const buf = this.iseBuffer.get(ws);
-    if (!buf || buf.audio.length === 0) return;
+    if (!buf || buf.audio.length === 0) { console.log('  -> skip: no audio buffer'); return; }
     const audio = Buffer.concat(buf.audio);
+    console.log(`  -> audio: ${audio.length} bytes`);
     this.iseBuffer.set(ws, { audio: [], text: '' });
 
     const ise = new XunfeiISE(cfg);
