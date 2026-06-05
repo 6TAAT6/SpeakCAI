@@ -63,6 +63,9 @@ export class XunfeiISE {
           category: 'read_sentence',
           cmd: 'ssb',
           text: '﻿' + text,
+          tte: 'utf-8',
+          rstcd: 'utf8',
+          ttp_skip: true,
           aue: 'raw',
           auf: 'audio/L16;rate=16000',
           rst: 'entirety',
@@ -80,15 +83,16 @@ export class XunfeiISE {
         const isLast = i === totalChunks - 1;
         const aus = isFirst ? 1 : isLast ? 4 : 2;
         this.ws!.send(JSON.stringify({
+          common: { app_id: this.config.appId },
           business: {
             cmd: 'auw',
             aue: 'raw',
             auf: 'audio/L16;rate=16000',
+            aus,
           },
           data: {
             status: isLast ? 2 : 1,
             data: chunk.toString('base64'),
-            aus,
           },
         }));
       }
@@ -98,19 +102,60 @@ export class XunfeiISE {
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.code !== 0) {
+          console.error(`❌ ISE 错误码 ${msg.code}: ${msg.message || ''}`);
           handler.onError(new Error(`ISE ${msg.code}: ${msg.message || ''}`));
           return;
         }
-        const d = msg.data;
-        if (!d) return;
-        handler.onResult({
-          totalScore: Math.round(d.total_score ?? 0),
-          accuracyScore: Math.round(d.accuracy_score ?? 0),
-          fluencyScore: Math.round(d.fluency_score ?? 0),
-          integrityScore: Math.round(d.integrity_score ?? 0),
-          weakPhones: extractWeakPhones(d.phone_score),
-        });
-      } catch { /* skip */ }
+        if (msg.data?.status !== 2) return; // status==2 才是最终结果
+
+        const decoded = Buffer.from(msg.data.data, 'base64').toString('utf-8');
+
+        if (decoded.startsWith('<?xml')) {
+          // XML 格式 — 分数在 <read_chapter> 标签的属性里
+          const getAttr = (attr: string) => {
+            const m = decoded.match(new RegExp(`${attr}="([^"]*)"`));
+            return m ? parseFloat(m[1]) : 0;
+          };
+          const scores = {
+            total_score: getAttr('total_score'),
+            accuracy_score: getAttr('accuracy_score'),
+            fluency_score: getAttr('fluency_score'),
+            integrity_score: getAttr('integrity_score'),
+          };
+          // 提取 phone 标签属性: <phone phoneme="..." score="..." deducted_score="..."/>
+          const phones: Array<{ phone: string; score: number; deducted_score: number }> = [];
+          const phoneRe = /<phone\s+([^>]*?)\s*\/?>/g;
+          let m: RegExpExecArray | null;
+          while ((m = phoneRe.exec(decoded)) !== null) {
+            const attrs = m[1];
+            const ph = (attrs.match(/phoneme="([^"]*)"/)?.[1] || attrs.match(/phn="([^"]*)"/)?.[1] || '');
+            const sc = parseFloat(attrs.match(/score="([^"]*)"/)?.[1] || '0');
+            const dd = parseFloat(attrs.match(/deducted_score="([^"]*)"/)?.[1] || '0');
+            if (ph) phones.push({ phone: ph, score: sc, deducted_score: dd });
+          }
+
+          console.log('📊 ISE scores:', scores, 'phones:', phones.length);
+          handler.onResult({
+            totalScore: Math.round(scores.total_score),
+            accuracyScore: Math.round(scores.accuracy_score),
+            fluencyScore: Math.round(scores.fluency_score),
+            integrityScore: Math.round(scores.integrity_score),
+            weakPhones: extractWeakPhones(phones),
+          });
+        } else {
+          // JSON 格式
+          const inner = JSON.parse(decoded);
+          handler.onResult({
+            totalScore: Math.round(inner.total_score ?? 0),
+            accuracyScore: Math.round(inner.accuracy_score ?? 0),
+            fluencyScore: Math.round(inner.fluency_score ?? 0),
+            integrityScore: Math.round(inner.integrity_score ?? 0),
+            weakPhones: extractWeakPhones(inner.phone_score),
+          });
+        }
+      } catch (e) {
+        console.error('❌ ISE 消息解析失败:', e);
+      }
     });
 
     this.ws.on('error', (err) => {

@@ -198,7 +198,7 @@ export class WSServer {
             for (const buf of buffered) {
               asr!.sendAudio(buf);
             }
-            this.pendingAudio.delete(ws); this.iseBuffer.delete(ws);
+            this.pendingAudio.delete(ws);
           }
         },
         onPartial: (text: string) => {
@@ -215,7 +215,7 @@ export class WSServer {
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
-          this.pendingAudio.delete(ws); this.iseBuffer.delete(ws);
+          this.pendingAudio.delete(ws);
           this.iseBuffer.delete(ws);
         },
       });
@@ -328,12 +328,6 @@ export class WSServer {
 
   // ---- 打断（仅影响当前客户端）----
   private handleInterrupt(ws: WebSocket): void {
-    // 打断时触发发音评测（利用已缓冲的音频 + 最后识别文本）
-    const buf = this.iseBuffer.get(ws);
-    if (buf && buf.audio.length > 0 && buf.text) {
-      this.evaluatePronounce(ws, buf.text);
-    }
-
     // 移除打断导致的截断 assistant 消息
     const session = this.sessionMap.get(ws);
     session?.popLastAssistant();
@@ -345,11 +339,8 @@ export class WSServer {
     // 中断当前 TTS 合成
     this.ttsMap.get(ws)?.abort();
 
-    // 重置当前客户端的 ASR
-    const asr = this.asrMap.get(ws);
-    if (asr) {
-      asr.end();
-    }
+    // 重置 ASR（cleanupASR 会触发发音评测）
+    this.cleanupASR(ws);
   }
 
   // ---- 继续对话（打断后，复用已有上下文重新生成）----
@@ -386,8 +377,11 @@ export class WSServer {
     }
     // 停止录音时触发发音评测
     const buf = this.iseBuffer.get(ws);
+    console.log(`🧹 cleanupASR: iseBuf=${!!buf}, audio=${buf?.audio.length || 0}, text="${(buf?.text || '').slice(0, 20)}"`);
     if (buf && buf.audio.length > 0 && buf.text) {
       this.evaluatePronounce(ws, buf.text);
+    } else {
+      console.log('  -> skip ISE: 缺少音频或文本');
     }
   }
 

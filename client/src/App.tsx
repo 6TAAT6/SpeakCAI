@@ -185,6 +185,7 @@ export function App() {
 
   const handleRecordToggle = useCallback(async () => {
     if (isRecording) {
+      messagesRef.current.send({ type: 'interrupt' });
       stop();
       setFrameCount(0);
       setPartialText('');
