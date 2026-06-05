@@ -16,6 +16,8 @@ export interface ASRConfig {
 
 // ---- 回调 ----
 export interface ASREventHandler {
+  /** ASR WebSocket 握手成功 */
+  onReady?: () => void;
   /** 中间识别结果（边说边出） */
   onPartial: (text: string) => void;
   /** 最终识别结果（整句确认） */
@@ -70,7 +72,7 @@ interface ASRDataPayload {
       rt?: Array<{
         ws: Array<{ cw: Array<{ w: string; wp?: string; lg?: string }> }>;
       }>;
-      type: string;
+      type: string;  // "0" = final, "1" = partial (at st level)
     };
   };
   ls?: boolean;
@@ -133,6 +135,7 @@ export class XunfeiASR {
         // 握手成功 / 心跳
         if (msg.action === 'started') {
           console.log('✅ 讯飞 ASR 握手成功');
+          this.handler.onReady?.();
           return;
         }
 
@@ -181,10 +184,18 @@ export class XunfeiASR {
     });
   }
 
+  private sentCount = 0;
+
   /** 发送 Int16 16kHz mono PCM 音频数据 */
   sendAudio(data: Buffer): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      this.sentCount++;
+      if (this.sentCount <= 3 || this.sentCount % 100 === 0) {
+        console.log(`📤 发送音频 #${this.sentCount} ${data.length} bytes`);
+      }
       this.ws.send(data);
+    } else if (this.sentCount === 0) {
+      console.log(`⏳ ASR ws 未就绪，readyState=${this.ws?.readyState}`);
     }
   }
 
@@ -206,16 +217,17 @@ export class XunfeiASR {
   // ---- 解析讯飞返回的识别结果 ----
   private extractResult(data: ASRDataPayload): { text: string; isFinal: boolean } | null {
     const st = data?.cn?.st;
-    if (!st) return null;
+    if (!st || !st.rt) return null;
 
+    // 遍历所有 word segments，拼接文本
     const text =
       st.rt
-        ?.flatMap((seg) => seg.ws.flatMap((w) => w.cw.map((c) => c.w)))
-        .join('') || '';
+        .flatMap((seg) => seg.ws?.flatMap((w) => w.cw.map((c) => c.w)) || [])
+        .join('');
 
     if (!text) return null;
 
-    // type: "0" = 确定性结果（final）, "1" = 中间结果（partial）
+    // type 在 st 层级: "0" = final, "1" = partial
     return { text, isFinal: st.type === '0' };
   }
 }

@@ -140,26 +140,52 @@ export class WSServer {
     }
   }
 
+  private audioFrameCount = 0;
+  // 缓冲 ASR 握手期间的音频帧，连接就绪后立即发送
+  private pendingAudio: Map<WebSocket, Buffer[]> = new Map();
+
   // ---- 音频帧 → ASR ----
   private handleAudioFrame(
     ws: WebSocket,
     msg: Extract<WSMessage, { type: 'audio_frame' }>,
   ): void {
+    this.audioFrameCount++;
+    if (this.audioFrameCount <= 5 || this.audioFrameCount % 50 === 0) {
+      console.log(`🎙 音频帧 #${this.audioFrameCount} seq=${msg.seq} dataLen=${msg.data.length}`);
+    }
+
     if (!asrConfigured()) return;
 
     let asr = this.asrMap.get(ws);
     if (!asr) {
+      const pending: Buffer[] = [];
+      this.pendingAudio.set(ws, pending);
+
       asr = new XunfeiASR(getASRConfig(), {
+        onReady: () => {
+          // ASR 握手完成，立即发送缓冲中的音频帧
+          const buffered = this.pendingAudio.get(ws);
+          if (buffered && buffered.length > 0) {
+            console.log(`📤 发送缓冲音频: ${buffered.length} 帧`);
+            for (const buf of buffered) {
+              asr!.sendAudio(buf);
+            }
+            this.pendingAudio.delete(ws);
+          }
+        },
         onPartial: (text: string) => {
+          console.log(`📝 ASR partial: "${text}"`);
           this.send(ws, { type: 'asr_partial', text });
         },
         onFinal: (text: string) => {
+          console.log(`✅ ASR final: "${text}"`);
           this.send(ws, { type: 'asr_final', text });
           // ASR 确认一句话 → 触发 AI 对话
           this.handleUserInput(ws, text);
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
+          this.pendingAudio.delete(ws);
         },
       });
       asr.connect();
@@ -167,7 +193,13 @@ export class WSServer {
     }
 
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
-    asr.sendAudio(buffer);
+    // 如果 ASR 还未就绪，缓冲；否则直接发送
+    const pending = this.pendingAudio.get(ws);
+    if (pending) {
+      pending.push(buffer);
+    } else {
+      asr.sendAudio(buffer);
+    }
   }
 
   // ---- 用户输入 → LLM ----
