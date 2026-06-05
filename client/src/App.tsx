@@ -3,7 +3,7 @@ import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
 export function App() {
-  const { status, sessionId, messages, lastMessage } = useWebSocket(getWsUrl());
+  const { status, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -21,19 +21,18 @@ export function App() {
   const audioChunksRef = useRef<Uint8Array[]>([]);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   /** 停止当前播放的音频 */
   const stopAudio = useCallback(() => {
-    try { activeSourceRef.current?.stop(); } catch { /* 可能已停止 */ }
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
     audioChunksRef.current = [];
   }, []);
 
-  /** 播放 PCM 16kHz 16bit mono 原始音频 */
+  /** 播放 PCM 16kHz 16bit mono 音频 */
   const playPCM = useCallback((pcmData: Uint8Array) => {
-    // 停止当前播放中的音频
     stopAudio();
-
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
 
@@ -53,6 +52,11 @@ export function App() {
     source.onended = () => { activeSourceRef.current = null; };
     source.start();
   }, [stopAudio]);
+
+  // ---- 自动滚动到底部 ----
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [finalSegments, aiText]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -80,7 +84,6 @@ export function App() {
         setInterrupted(false);
         break;
       case 'tts_audio':
-        // 新 TTS 会话开始，清空上一轮的缓冲
         if (lastMessage.chunkIndex === 0) {
           audioChunksRef.current = [];
           stopAudio();
@@ -109,7 +112,7 @@ export function App() {
         break;
       }
     }
-  }, [lastMessage, playPCM]);
+  }, [lastMessage, playPCM, stopAudio]);
 
   const statusIndicator = useMemo(() => {
     switch (status) {
@@ -124,19 +127,13 @@ export function App() {
     }
   }, [status]);
 
-  const handlePing = () => {
-    messages.send({ type: 'ping' });
-  };
-
   const handleInterruptToggle = () => {
     if (interrupted) {
-      // 继续：通知后端重新生成
       messages.send({ type: 'resume' });
       setInterrupted(false);
       setAiStreaming(true);
       setAiText('');
     } else {
-      // 打断
       messages.send({ type: 'interrupt' });
       setAiStreaming(false);
       setInterrupted(true);
@@ -144,7 +141,7 @@ export function App() {
     }
   };
 
-  // ---- 音频采集：AudioWorklet → WebSocket ----
+  // ---- 音频采集 ----
   const { start, stop, isRecording, error: captureError } = useAudioCapture({
     onAudioFrame: (frame) => {
       messagesRef.current.send({
@@ -163,7 +160,6 @@ export function App() {
       setPartialText('');
       setFinalSegments([]);
     } else {
-      // 新一轮录音：清空上一轮 AI 回复和 TTS 缓冲
       setAiText('');
       setAiStreaming(false);
       setFinalSegments([]);
@@ -175,74 +171,77 @@ export function App() {
   }, [isRecording, start, stop]);
 
   const wsReady = status === 'connected';
+  const hasConversation = partialText || finalSegments.length > 0 || aiText || aiStreaming;
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>🎙️ SpeakCAI</h1>
-        <div className="connection-status" style={{ borderColor: statusIndicator.color }}>
-          <span className="status-dot">{statusIndicator.emoji}</span>
-          <span className="status-text">
-            {statusIndicator.text}
-            {sessionId && <small> · Session: {sessionId.slice(0, 8)}</small>}
-          </span>
-          <button onClick={handlePing} disabled={!wsReady}>
-            Ping
-          </button>
-          <button
-            onClick={handleRecordToggle}
-            disabled={!wsReady}
-            className={isRecording ? 'recording-btn' : ''}
-          >
-            {isRecording ? '⏹ 停止' : '🎤 录音'}
-          </button>
-        </div>
+      {/* ---- 顶部固定栏 ---- */}
+      <header className="top-bar">
+        <span className="brand">SpeakCAI</span>
+        <span className="status-badge" style={{ color: statusIndicator.color }}>
+          {statusIndicator.emoji} {statusIndicator.text}
+        </span>
       </header>
 
-      <main className="app-main">
-        {(partialText || finalSegments.length > 0) && (
-          <div className="caption-area">
-            {finalSegments.map((text, i) => (
-              <p key={i} className="caption-final">
-                {text}
-              </p>
-            ))}
-            {partialText && <p className="caption-partial">{partialText}</p>}
-          </div>
-        )}
-
-        {/* ---- AI 对话回复 ---- */}
-        {(aiText || aiStreaming) && (
-          <div className="ai-response-area">
-            <div className="ai-response-header">
-              <span>🤖 AI 教练</span>
-              {aiStreaming && <span className="streaming-indicator">● 回复中...</span>}
-              <button onClick={handleInterruptToggle} className="interrupt-btn">
-                {interrupted ? '▶ 继续' : '⏹ 打断'}
-              </button>
-            </div>
-            <p className="ai-response-text">{aiText || '...'}</p>
-          </div>
-        )}
-
-        {isRecording ? (
-          <div className="recording-indicator">
-            <span className="recording-dot" />
-            <span>
-              录音中 · 已发送 {frameCount} 帧
-              <small>（{frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s）</small>
-            </span>
-          </div>
-        ) : captureError ? (
-          <p className="error-message">{captureError}</p>
-        ) : (
+      {/* ---- 对话滚动区 ---- */}
+      <main className="chat-area">
+        {!hasConversation && !isRecording && !captureError && (
           <p className="placeholder">
-            {wsReady
-              ? '系统就绪，点击"录音"开始采集音频'
-              : '正在建立连接，请确保服务端已启动...'}
+            {wsReady ? '点击底部按钮开始录音对话' : '正在建立连接，请确保服务端已启动...'}
           </p>
         )}
+
+        {captureError && <p className="error-message">{captureError}</p>}
+
+        {finalSegments.map((text, i) => (
+          <div key={`u-${i}`} className="bubble user-bubble">
+            <span className="bubble-label">You</span>
+            <p>{text}</p>
+          </div>
+        ))}
+
+        {partialText && (
+          <div className="bubble user-bubble partial">
+            <span className="bubble-label">You</span>
+            <p>{partialText}</p>
+          </div>
+        )}
+
+        {(aiText || aiStreaming) && (
+          <div className="bubble ai-bubble">
+            <div className="bubble-header">
+              <span className="bubble-label">🤖 AI</span>
+              {aiStreaming && <span className="streaming-dot" />}
+            </div>
+            <p>{aiText || '...'}</p>
+          </div>
+        )}
+
+        <div ref={chatEndRef} />
       </main>
+
+      {/* ---- 底部录音控制栏 ---- */}
+      <footer className="bottom-bar">
+        {isRecording && (
+          <span className="record-timer">
+            ● {frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s
+          </span>
+        )}
+
+        <button
+          onClick={handleRecordToggle}
+          disabled={!wsReady}
+          className={`record-btn ${isRecording ? 'recording' : ''}`}
+        >
+          {isRecording ? '⏹ 停止' : '🎤 开始对话'}
+        </button>
+
+        {(aiStreaming || interrupted) && (
+          <button onClick={handleInterruptToggle} className="ctrl-btn">
+            {interrupted ? '▶ 继续' : '⏹ 打断'}
+          </button>
+        )}
+      </footer>
     </div>
   );
 }
