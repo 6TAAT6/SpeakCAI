@@ -33,6 +33,13 @@ export class ConversationSession {
     this.messages.push({ role: 'user', content: text });
   }
 
+  /** 移除最后一条 assistant 消息（打断后去除截断回复） */
+  popLastAssistant(): void {
+    if (this.messages.length > 1 && this.messages[this.messages.length - 1].role === 'assistant') {
+      this.messages.pop();
+    }
+  }
+
   /** 添加助手回复 */
   addAssistantMessage(text: string): void {
     this.messages.push({ role: 'assistant', content: text });

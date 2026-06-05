@@ -15,6 +15,44 @@ export function App() {
   // ---- AI 对话状态 ----
   const [aiText, setAiText] = useState('');
   const [aiStreaming, setAiStreaming] = useState(false);
+  const [interrupted, setInterrupted] = useState(false);
+
+  // ---- TTS 音频状态 ----
+  const audioChunksRef = useRef<Uint8Array[]>([]);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+  /** 停止当前播放的音频 */
+  const stopAudio = useCallback(() => {
+    try { activeSourceRef.current?.stop(); } catch { /* 可能已停止 */ }
+    activeSourceRef.current = null;
+    audioChunksRef.current = [];
+  }, []);
+
+  /** 播放 PCM 16kHz 16bit mono 原始音频 */
+  const playPCM = useCallback((pcmData: Uint8Array) => {
+    // 停止当前播放中的音频
+    stopAudio();
+
+    const ctx = audioCtxRef.current || new AudioContext();
+    audioCtxRef.current = ctx;
+
+    const samples = new Int16Array(pcmData.buffer);
+    const float32 = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      float32[i] = samples[i] / 32768;
+    }
+
+    const buffer = ctx.createBuffer(1, samples.length, 16000);
+    buffer.copyToChannel(float32, 0);
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    activeSourceRef.current = source;
+    source.onended = () => { activeSourceRef.current = null; };
+    source.start();
+  }, [stopAudio]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -39,9 +77,39 @@ export function App() {
         break;
       case 'llm_done':
         setAiStreaming(false);
+        setInterrupted(false);
         break;
+      case 'tts_audio':
+        // 新 TTS 会话开始，清空上一轮的缓冲
+        if (lastMessage.chunkIndex === 0) {
+          audioChunksRef.current = [];
+          stopAudio();
+        }
+        audioChunksRef.current.push(
+          new Uint8Array(
+            atob(lastMessage.data)
+              .split('')
+              .map((c) => c.charCodeAt(0)),
+          ),
+        );
+        break;
+      case 'tts_done': {
+        const chunks = audioChunksRef.current;
+        if (chunks.length > 0) {
+          const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+          const merged = new Uint8Array(totalLen);
+          let offset = 0;
+          for (const c of chunks) {
+            merged.set(c, offset);
+            offset += c.length;
+          }
+          audioChunksRef.current = [];
+          playPCM(merged);
+        }
+        break;
+      }
     }
-  }, [lastMessage]);
+  }, [lastMessage, playPCM]);
 
   const statusIndicator = useMemo(() => {
     switch (status) {
@@ -60,9 +128,20 @@ export function App() {
     messages.send({ type: 'ping' });
   };
 
-  const handleInterrupt = () => {
-    messages.send({ type: 'interrupt' });
-    setAiStreaming(false);
+  const handleInterruptToggle = () => {
+    if (interrupted) {
+      // 继续：通知后端重新生成
+      messages.send({ type: 'resume' });
+      setInterrupted(false);
+      setAiStreaming(true);
+      setAiText('');
+    } else {
+      // 打断
+      messages.send({ type: 'interrupt' });
+      setAiStreaming(false);
+      setInterrupted(true);
+      stopAudio();
+    }
   };
 
   // ---- 音频采集：AudioWorklet → WebSocket ----
@@ -84,11 +163,13 @@ export function App() {
       setPartialText('');
       setFinalSegments([]);
     } else {
-      // 新一轮录音：清空上一轮 AI 回复
+      // 新一轮录音：清空上一轮 AI 回复和 TTS 缓冲
       setAiText('');
       setAiStreaming(false);
       setFinalSegments([]);
       setPartialText('');
+      setInterrupted(false);
+      audioChunksRef.current = [];
       await start();
     }
   }, [isRecording, start, stop]);
@@ -98,7 +179,7 @@ export function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🎙️ 英语口语教练</h1>
+        <h1>🎙️ SpeakCAI</h1>
         <div className="connection-status" style={{ borderColor: statusIndicator.color }}>
           <span className="status-dot">{statusIndicator.emoji}</span>
           <span className="status-text">
@@ -136,8 +217,8 @@ export function App() {
             <div className="ai-response-header">
               <span>🤖 AI 教练</span>
               {aiStreaming && <span className="streaming-indicator">● 回复中...</span>}
-              <button onClick={handleInterrupt} className="interrupt-btn">
-                ⏹ 打断
+              <button onClick={handleInterruptToggle} className="interrupt-btn">
+                {interrupted ? '▶ 继续' : '⏹ 打断'}
               </button>
             </div>
             <p className="ai-response-text">{aiText || '...'}</p>

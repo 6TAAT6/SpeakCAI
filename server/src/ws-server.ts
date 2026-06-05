@@ -6,6 +6,8 @@ import type { ASRConfig } from './asr.ts';
 import { ConversationSession } from './session.ts';
 import { DeepSeekLLM } from './llm.ts';
 import type { LLMConfig } from './llm.ts';
+import { XunfeiTTS } from './tts.ts';
+import type { TTSConfig } from './tts.ts';
 
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
@@ -17,6 +19,14 @@ const getASRConfig = (): ASRConfig => ({
 const getLLMConfig = (): LLMConfig => ({
   apiKey: process.env.DEEPSEEK_API_KEY || '',
   model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+});
+
+const getTTSConfig = (): TTSConfig => ({
+  appId: process.env.XUNFEI_APP_ID || '',
+  apiKey: process.env.XUNFEI_API_KEY || '',
+  apiSecret: process.env.XUNFEI_API_SECRET || '',
+  voiceName: 'catherine', // 英文女声-Catherine
+  speed: 50,
 });
 
 function asrConfigured(): boolean {
@@ -41,6 +51,7 @@ export class WSServer {
   private sessionMap: Map<WebSocket, ConversationSession> = new Map();
   // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
   private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
+  private ttsMap: Map<WebSocket, XunfeiTTS> = new Map();
 
   constructor(private port: number) {}
 
@@ -91,6 +102,8 @@ export class WSServer {
         this.cleanupASR(ws);
         this.sessionMap.delete(ws);
         this.llmMap.delete(ws);
+        this.ttsMap.get(ws)?.abort();
+        this.ttsMap.delete(ws);
       });
 
       ws.on('error', (err) => {
@@ -114,6 +127,7 @@ export class WSServer {
     this.clients.clear();
     this.sessionMap.clear();
     this.llmMap.clear();
+    this.ttsMap.clear();
   }
 
   // ---- 消息路由 ----
@@ -129,6 +143,10 @@ export class WSServer {
 
       case 'interrupt':
         this.handleInterrupt(ws);
+        break;
+
+      case 'resume':
+        this.handleResume(ws);
         break;
 
       case 'config_update':
@@ -200,16 +218,17 @@ export class WSServer {
   }
 
   // ---- 用户输入 → LLM ----
-  private async handleUserInput(ws: WebSocket, text: string): Promise<void> {
+  private async handleUserInput(ws: WebSocket, text: string, isResume = false): Promise<void> {
     const llm = this.llmMap.get(ws);
     if (!llm) return;
 
     const session = this.sessionMap.get(ws);
     if (!session) return;
 
-    session.addUserMessage(text);
+    if (!isResume) session.addUserMessage(text);
 
     let llmBuffer = '';
+    let aborted = false;
 
     await llm.chat(session.getMessages(), {
       onStream: (chunk: string) => {
@@ -217,10 +236,12 @@ export class WSServer {
         this.send(ws, { type: 'llm_stream', text: chunk });
       },
       onDone: (fullText: string) => {
-        if (fullText) {
+        if (fullText && !aborted) {
           session.addAssistantMessage(fullText);
         }
         this.send(ws, { type: 'llm_done' });
+        // LLM 回复完成 → 自动触发 TTS 语音合成
+        this.handleTTS(ws, fullText);
       },
       onError: (err: Error) => {
         console.error(`⚠️ LLM 错误: ${err.message}`);
@@ -229,17 +250,64 @@ export class WSServer {
     });
   }
 
+  // ---- LLM 文本 → TTS 语音 ----
+  private handleTTS(ws: WebSocket, text: string): void {
+    const cfg = getTTSConfig();
+    if (!cfg.appId || cfg.appId === 'your_app_id') return;
+    if (!text) return;
+
+    // 中止上一次 TTS，避免重叠语音
+    this.ttsMap.get(ws)?.abort();
+
+    const tts = new XunfeiTTS(cfg);
+    this.ttsMap.set(ws, tts);
+
+    let chunkIndex = 0;
+    tts.synthesize(text, {
+      onAudio: (chunk: Buffer) => {
+        this.send(ws, {
+          type: 'tts_audio',
+          data: chunk.toString('base64'),
+          chunkIndex: chunkIndex++,
+        });
+      },
+      onDone: () => {
+        this.send(ws, { type: 'tts_done' });
+      },
+      onError: (err: Error) => {
+        console.error(`⚠️ TTS 错误: ${err.message}`);
+      },
+    });
+  }
+
   // ---- 打断（仅影响当前客户端）----
   private handleInterrupt(ws: WebSocket): void {
+    // 移除打断导致的截断 assistant 消息
+    const session = this.sessionMap.get(ws);
+    session?.popLastAssistant();
+
     // 中断当前客户端的 LLM 流式输出
     const llm = this.llmMap.get(ws);
     llm?.abort();
+
+    // 中断当前 TTS 合成
+    this.ttsMap.get(ws)?.abort();
 
     // 重置当前客户端的 ASR
     const asr = this.asrMap.get(ws);
     if (asr) {
       asr.end();
     }
+  }
+
+  // ---- 继续对话（打断后，复用已有上下文重新生成）----
+  private handleResume(ws: WebSocket): void {
+    // 取最后一条用户消息，重新走 LLM（不重复添加到会话）
+    const session = this.sessionMap.get(ws);
+    if (!session) return;
+    const lastUser = session.getMessages().filter((m) => m.role === 'user').pop();
+    if (!lastUser) return;
+    this.handleUserInput(ws, lastUser.content, true);
   }
 
   // ---- 配置更新 ----

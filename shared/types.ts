@@ -38,6 +38,9 @@ export type WSMessage =
   // 打断信号（双向）
   | { type: 'interrupt' }
 
+  // 继续对话（打断后恢复）
+  | { type: 'resume' }
+
   // 配置更新（浏览器 → 后端）
   | {
       type: 'config_update';
