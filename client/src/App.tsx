@@ -12,20 +12,34 @@ export function App() {
   const [partialText, setPartialText] = useState('');
   const [finalSegments, setFinalSegments] = useState<string[]>([]);
 
+  // ---- AI 对话状态 ----
+  const [aiText, setAiText] = useState('');
+  const [aiStreaming, setAiStreaming] = useState(false);
+
   useEffect(() => {
     if (!lastMessage) return;
-    if (lastMessage.type === 'asr_partial') {
-      setPartialText(lastMessage.text);
-    } else if (lastMessage.type === 'asr_final') {
-      const text = lastMessage.text;
-      if (text) {
-        setPartialText('');
-        setFinalSegments((prev) => {
-          // 去重：避免与上一条 final 相同
-          if (prev.length > 0 && prev[prev.length - 1] === text) return prev;
-          return [...prev, text];
-        });
+    switch (lastMessage.type) {
+      case 'asr_partial':
+        setPartialText(lastMessage.text);
+        break;
+      case 'asr_final': {
+        const text = lastMessage.text;
+        if (text) {
+          setPartialText('');
+          setFinalSegments((prev) => {
+            if (prev.length > 0 && prev[prev.length - 1] === text) return prev;
+            return [...prev, text];
+          });
+        }
+        break;
       }
+      case 'llm_stream':
+        setAiStreaming(true);
+        setAiText((prev) => prev + lastMessage.text);
+        break;
+      case 'llm_done':
+        setAiStreaming(false);
+        break;
     }
   }, [lastMessage]);
 
@@ -44,6 +58,11 @@ export function App() {
 
   const handlePing = () => {
     messages.send({ type: 'ping' });
+  };
+
+  const handleInterrupt = () => {
+    messages.send({ type: 'interrupt' });
+    setAiStreaming(false);
   };
 
   // ---- 音频采集：AudioWorklet → WebSocket ----
@@ -65,6 +84,11 @@ export function App() {
       setPartialText('');
       setFinalSegments([]);
     } else {
+      // 新一轮录音：清空上一轮 AI 回复
+      setAiText('');
+      setAiStreaming(false);
+      setFinalSegments([]);
+      setPartialText('');
       await start();
     }
   }, [isRecording, start, stop]);
@@ -103,6 +127,20 @@ export function App() {
               </p>
             ))}
             {partialText && <p className="caption-partial">{partialText}</p>}
+          </div>
+        )}
+
+        {/* ---- AI 对话回复 ---- */}
+        {(aiText || aiStreaming) && (
+          <div className="ai-response-area">
+            <div className="ai-response-header">
+              <span>🤖 AI 教练</span>
+              {aiStreaming && <span className="streaming-indicator">● 回复中...</span>}
+              <button onClick={handleInterrupt} className="interrupt-btn">
+                ⏹ 打断
+              </button>
+            </div>
+            <p className="ai-response-text">{aiText || '...'}</p>
           </div>
         )}
 

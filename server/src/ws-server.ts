@@ -7,24 +7,32 @@ import { ConversationSession } from './session.ts';
 import { DeepSeekLLM } from './llm.ts';
 import type { LLMConfig } from './llm.ts';
 
-// ---- 环境配置 ----
-const asrConfig: ASRConfig = {
+// ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
+const getASRConfig = (): ASRConfig => ({
   appId: process.env.XUNFEI_APP_ID || '',
+  apiKey: process.env.XUNFEI_API_KEY || '',
   apiSecret: process.env.XUNFEI_API_SECRET || '',
-};
+});
 
-const llmConfig: LLMConfig = {
+const getLLMConfig = (): LLMConfig => ({
   apiKey: process.env.DEEPSEEK_API_KEY || '',
   model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-};
+});
 
 function asrConfigured(): boolean {
-  return Boolean(asrConfig.appId && asrConfig.apiSecret && asrConfig.appId !== 'your_app_id');
+  const cfg = getASRConfig();
+  return Boolean(
+    cfg.appId && cfg.apiKey && cfg.apiSecret &&
+    cfg.appId !== 'your_app_id' &&
+    cfg.apiKey !== 'your_api_key' &&
+    cfg.apiSecret !== 'your_api_secret',
+  );
 }
 
-const llmConfigured = (): boolean => {
-  return Boolean(llmConfig.apiKey && llmConfig.apiKey !== 'your_deepseek_api_key');
-};
+function llmConfigured(): boolean {
+  const cfg = getLLMConfig();
+  return Boolean(cfg.apiKey && cfg.apiKey !== 'your_deepseek_api_key');
+}
 
 export class WSServer {
   private wss: WebSocketServer | null = null;
@@ -58,7 +66,7 @@ export class WSServer {
       this.sessionMap.set(ws, session);
 
       if (llmConfigured()) {
-        this.llmMap.set(ws, new DeepSeekLLM(llmConfig));
+        this.llmMap.set(ws, new DeepSeekLLM(getLLMConfig()));
       }
 
       console.log(`🔗 新连接: ${sessionId.slice(0, 8)} (当前在线: ${this.clients.size})`);
@@ -132,26 +140,50 @@ export class WSServer {
     }
   }
 
+  // 缓冲 ASR 握手期间的音频帧，连接就绪后立即发送（per-client）
+  private pendingAudio: Map<WebSocket, Buffer[]> = new Map();
+
+  private clientFrameCount = new Map<WebSocket, number>();
+
   // ---- 音频帧 → ASR ----
   private handleAudioFrame(
     ws: WebSocket,
     msg: Extract<WSMessage, { type: 'audio_frame' }>,
   ): void {
+    const cnt = (this.clientFrameCount.get(ws) || 0) + 1;
+    this.clientFrameCount.set(ws, cnt);
+    if (cnt <= 3) console.log(`🎙 帧#${cnt} seq=${msg.seq} len=${msg.data.length}`);
+
     if (!asrConfigured()) return;
 
     let asr = this.asrMap.get(ws);
     if (!asr) {
-      asr = new XunfeiASR(asrConfig, {
+      const pending: Buffer[] = [];
+      this.pendingAudio.set(ws, pending);
+
+      asr = new XunfeiASR(getASRConfig(), {
+        onReady: () => {
+          const buffered = this.pendingAudio.get(ws);
+          console.log(`🔗 ASR ready, 缓冲帧数: ${buffered?.length || 0}`);
+          if (buffered && buffered.length > 0) {
+            for (const buf of buffered) {
+              asr!.sendAudio(buf);
+            }
+            this.pendingAudio.delete(ws);
+          }
+        },
         onPartial: (text: string) => {
+          console.log(`📝 partial: "${text}"`);
           this.send(ws, { type: 'asr_partial', text });
         },
         onFinal: (text: string) => {
+          console.log(`✅ final: "${text}"`);
           this.send(ws, { type: 'asr_final', text });
-          // ASR 确认一句话 → 触发 AI 对话
           this.handleUserInput(ws, text);
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
+          this.pendingAudio.delete(ws);
         },
       });
       asr.connect();
@@ -159,7 +191,12 @@ export class WSServer {
     }
 
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
-    asr.sendAudio(buffer);
+    const pending = this.pendingAudio.get(ws);
+    if (pending) {
+      pending.push(buffer);
+    } else {
+      asr.sendAudio(buffer);
+    }
   }
 
   // ---- 用户输入 → LLM ----

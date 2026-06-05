@@ -78,6 +78,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
   const send = useCallback((msg: WSMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
+    } else {
+      console.warn('WS 未就绪，消息丢弃:', msg.type);
     }
   }, []);
 

@@ -44,6 +44,7 @@ export function useAudioCapture({ onAudioFrame }: UseAudioCaptureOptions): UseAu
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const moduleLoadedRef = useRef(false);
+  const startingRef = useRef(false); // 防重入：start() 执行中标记
   const onAudioFrameRef = useRef(onAudioFrame);
   onAudioFrameRef.current = onAudioFrame;
 
@@ -76,6 +77,9 @@ export function useAudioCapture({ onAudioFrame }: UseAudioCaptureOptions): UseAu
   }, []);
 
   const start = useCallback(async () => {
+    // 防重入：双击录音按钮时忽略第二次调用
+    if (startingRef.current || isRecording) return;
+    startingRef.current = true;
     setError(null);
 
     try {
@@ -119,6 +123,7 @@ export function useAudioCapture({ onAudioFrame }: UseAudioCaptureOptions): UseAu
 
       source.connect(workletNode);
       setIsRecording(true);
+      startingRef.current = false;
     } catch (err) {
       const message =
         err instanceof DOMException && err.name === 'NotAllowedError'
@@ -126,8 +131,9 @@ export function useAudioCapture({ onAudioFrame }: UseAudioCaptureOptions): UseAu
           : `音频采集失败: ${err instanceof Error ? err.message : String(err)}`;
       setError(message);
       teardown();
+      startingRef.current = false;
     }
-  }, [teardown]);
+  }, [teardown, isRecording]);
 
   const stop = useCallback(() => {
     teardown();

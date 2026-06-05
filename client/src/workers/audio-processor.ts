@@ -1,12 +1,14 @@
-// ===== AudioWorklet Processor — 音频采集工作线程 =====
-// 运行在独立音频渲染线程，每 256ms 将累积的 PCM 数据发送回主线程
+// ===== AudioWorklet Processor — 音频采集 + 降采样到 16kHz =====
+// 运行在独立音频渲染线程，每 256ms 输出一帧 16kHz PCM 数据
+//
+// 浏览器 AudioContext 通常以系统采样率运行（如 48kHz），
+// 但讯飞 ASR 要求 16kHz。此处做降采样后输出。
 //
 // 此文件在 AudioWorkletGlobalScope 中执行，以下全局变量由浏览器提供：
 //   sampleRate, currentTime, AudioWorkletProcessor, registerProcessor
 
 /// <reference lib="webworker" />
 
-// AudioWorkletGlobalScope 专属全局类型（标准 TS lib 尚未收录）
 declare abstract class AudioWorkletProcessor {
   readonly port: MessagePort;
   abstract process(
@@ -30,51 +32,63 @@ interface AudioFrameMessage {
   seq: number;
 }
 
+const TARGET_RATE = 16000;
+const FRAME_MS = 256;
+const OUTPUT_FRAME = Math.round(TARGET_RATE * (FRAME_MS / 1000)); // 4096
+
 class AudioCaptureProcessor extends AudioWorkletProcessor {
-  private accumulated: Float32Array;
+  private readonly ratio: number; // systemRate / 16000
+  private buf: Float32Array;
   private offset = 0;
   private seq = 0;
-  private readonly frameSize: number;
 
   constructor() {
     super();
-    // 256ms 对应的采样点数 (如 16kHz → 4096, 48kHz → 12288)
-    this.frameSize = Math.round(sampleRate * 0.256);
-    this.accumulated = new Float32Array(this.frameSize);
+    this.ratio = sampleRate / TARGET_RATE;
+    // 缓冲足够输入样本以产出一帧输出 + 余量
+    const inputFrameSamples = Math.ceil(sampleRate * (FRAME_MS / 1000));
+    this.buf = new Float32Array(inputFrameSamples * 2);
   }
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0];
     if (!input || input.length === 0) return true;
 
-    // 取第一声道（mono），如需多声道可扩展为混音
     const channelData = input[0];
     if (!channelData || channelData.length === 0) return true;
 
     for (let i = 0; i < channelData.length; i++) {
-      // 多声道时混音到单声道（取平均）
+      // 混音到单声道
       let sample = channelData[i];
-      if (input.length > 1) {
-        for (let ch = 1; ch < input.length; ch++) {
-          sample += input[ch][i];
-        }
-        sample /= input.length;
+      for (let ch = 1; ch < input.length; ch++) {
+        sample += input[ch][i];
       }
-      this.accumulated[this.offset++] = sample;
+      sample /= input.length;
 
-      if (this.offset >= this.frameSize) {
-        // 复制一份发送（避免后续写入覆盖）
-        const frame = new Float32Array(this.accumulated);
+      this.buf[this.offset++] = sample;
+
+      // 累积够一帧 16kHz 输出时，降采样发送
+      if (this.offset >= OUTPUT_FRAME * this.ratio) {
+        const out = new Float32Array(OUTPUT_FRAME);
+        for (let j = 0; j < OUTPUT_FRAME; j++) {
+          // 最近邻降采样（48k→16k: 每 3 个取 1 个）
+          out[j] = this.buf[Math.floor(j * this.ratio)] || 0;
+        }
+
         this.port.postMessage({
-          data: frame,
-          sampleRate,
+          data: out,
+          sampleRate: TARGET_RATE,
           seq: this.seq++,
         } satisfies AudioFrameMessage);
-        this.offset = 0;
+
+        // 滑动窗口：保留剩余未消费的样本
+        const consumed = Math.floor(OUTPUT_FRAME * this.ratio);
+        this.buf.copyWithin(0, consumed, this.offset);
+        this.offset -= consumed;
       }
     }
 
-    return true; // 保持处理器存活
+    return true;
   }
 }
 
