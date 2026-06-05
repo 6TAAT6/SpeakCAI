@@ -100,3 +100,75 @@ body {
   font-size: 1.1rem;
   text-align: center;
 }
+
+/* ---- 录音按钮 ---- */
+
+.connection-status button.recording-btn {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+  animation: pulse-recording 1.5s ease-in-out infinite;
+}
+
+.connection-status button.recording-btn:hover {
+  background: #b91c1c;
+}
+
+/* ---- 录音中指示器 ---- */
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 32px;
+  border: 1.5px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 1.05rem;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+.recording-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: blink-dot 0.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.recording-indicator small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+/* ---- 错误消息 ---- */
+
+.error-message {
+  color: var(--danger);
+  font-size: 1rem;
+  text-align: center;
+  padding: 12px 20px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: #fef2f2;
+}
+
+/* ---- 动画 ---- */
+
+@keyframes pulse-recording {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: var(--danger); }
+  50% { border-color: #fca5a5; }
+}
+
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.75); }
+}

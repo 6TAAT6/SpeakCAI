@@ -43,8 +43,8 @@ export class WSServer {
         this.clients.delete(ws);
       });
 
-      ws.on('error', () => {
-        this.clients.delete(ws);
+      ws.on('error', (err) => {
+        console.error(`⚠️ WebSocket 错误: ${err.message}`);
       });
     });
 
