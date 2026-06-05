@@ -58,11 +58,7 @@ function utcString(): string {
 interface ASRMessage {
   msg_type?: string;
   res_type?: string;
-  action?: string;
-  code?: string;
-  desc?: string;
-  data?: string | ASRDataPayload;
-  sid?: string;
+  data?: Record<string, unknown> | ASRDataPayload;
 }
 
 interface ASRDataPayload {
@@ -115,10 +111,6 @@ export class XunfeiASR {
       .join('&');
 
     const url = `${ASR_URL}?${query}`;
-    console.log('🔊 讯飞 ASR utc:', utc);
-    console.log('🔊 讯飞 ASR lang:', lang);
-    console.log('🔊 讯飞 ASR baseString (签名原文):',
-      Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&'));
 
     this.ws = new WebSocket(url);
 
@@ -129,19 +121,29 @@ export class XunfeiASR {
     this.ws.on('message', (raw: Buffer) => {
       try {
         const msg: ASRMessage = JSON.parse(raw.toString());
-        const preview = JSON.stringify(msg).slice(0, 300);
-        console.log('📩 讯飞消息:', preview);
+        if (msg.msg_type === 'result') {
+          console.log('📩 识别:', JSON.stringify(msg).slice(0, 200));
+        }
 
-        // 握手成功 / 心跳
-        if (msg.action === 'started') {
+        // 握手/心跳/错误 字段嵌套在 data 内（大模型版 API）
+        const inner = msg.data as Record<string, unknown> | undefined;
+
+        // 握手成功
+        if (inner?.action === 'started') {
           console.log('✅ 讯飞 ASR 握手成功');
           this.handler.onReady?.();
           return;
         }
 
         // 错误帧
-        if (msg.action === 'error' || (msg.code && msg.code !== '0')) {
-          console.error('❌ 讯飞返回错误:', preview);
+        if (inner?.action === 'error') {
+          console.error('❌ 讯飞返回错误:', JSON.stringify(inner));
+          return;
+        }
+
+        // Client idle timeout (code 37005 in nested data.code)
+        if (inner?.code && String(inner.code) !== '0') {
+          console.log('⚠️ 讯飞事件:', inner.code, inner.message || '');
           return;
         }
 
@@ -190,12 +192,8 @@ export class XunfeiASR {
   sendAudio(data: Buffer): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.sentCount++;
-      if (this.sentCount <= 3 || this.sentCount % 100 === 0) {
-        console.log(`📤 发送音频 #${this.sentCount} ${data.length} bytes`);
-      }
+      if (this.sentCount <= 3) console.log(`📤→讯飞 #${this.sentCount} ${data.length}B`);
       this.ws.send(data);
-    } else if (this.sentCount === 0) {
-      console.log(`⏳ ASR ws 未就绪，readyState=${this.ws?.readyState}`);
     }
   }
 
