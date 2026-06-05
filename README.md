@@ -1,72 +1,70 @@
 # 英语口语教练 — SpeakCAI
 
-AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错与课后总结。72 小时参赛作品。
+AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错。72 小时参赛作品。
 
 ## 核心功能
 
-- **场景选择** — 面试 / 点餐 / 会议，切换对话上下文
-- **实时语音对话** — 流式 ASR + LLM + TTS，用户说完 <2 秒听到回复
-- **发音评测** — 浏览器 SpeechRecognition + DeepSeek 文本推断，混合方案
-- **语法/表达纠错** — 三层体系（即时提醒 + 课后报告 + 量化追踪）
+- **场景选择** — 面试 / 点餐 / 会议，一键切换对话上下文
+- **实时语音对话** — 流式 ASR + LLM + TTS，说完 < 2 秒听到回复
+- **实时字幕** — 录音时前端实时显示识别文字（partial + final）
+- **发音评测** — 讯飞 ISE 流式语音评测，音素级反馈
 - **三种纠错模式** — 沉浸（课后纠正）/ 教练（轻量提醒）/ 严师（追问重说）
-- **课后总结报告** — 错误分类 + 薄弱音素 + 改进建议 + 词汇升级
-- **对话历史** — 时间轴查看，中英双语对照
-- **中文翻译** — LLM 双语输出 + 前端开关一键切换
-- **量化反馈** — 评分曲线 + 雷达图 + 薄弱音素追踪 + 学习里程碑
+- **中文翻译** — LLM 双语输出，每轮中文对照
+- **打断/继续** — 随时打断 AI 回复，重新提问
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 前端 | React 19 + TypeScript + Vite |
+| 前端 | React 19 + TypeScript + Vite + AudioWorklet |
 | 后端 | Node.js + TypeScript + Express + ws |
 | 语音识别 | 讯飞 实时语音转写大模型 |
 | 语音合成 | 讯飞 语音合成 v2 |
-| 发音评测 | 浏览器 SpeechRecognition + DeepSeek 文本推断 |
+| 发音评测 | 讯飞 ISE 流式语音评测 |
 | 对话模型 | DeepSeek V4 Pro（1M 上下文，流式 SSE） |
-| 数据库 | SQLite（better-sqlite3） |
 
 ## 流式管道
 
 ```
-AudioWorklet 每 256ms 发一帧 ─→ 讯飞 ASR 流式返回文字 ─→ 前端实时字幕
-                                                            ↓
-                                        VAD 检测停顿（800ms 无声）
-                                                            ↓
-                                  DeepSeek SSE 流式吐回复文字
-                                                            ↓
-                                  讯飞 TTS 流式合成语音（并行）
-                                                            ↓
-                                                    浏览器播放
+AudioWorklet 256ms/帧 ─→ 讯飞 ASR 流式识别 ─→ 前端实时字幕
+                                                    ↓
+                              VAD 800ms 静音检测 → LLM SSE 流式回复
+                                                    ↓
+                                          讯飞 TTS 语音合成
+                                                    ↓
+                                              浏览器播放
 
-总延迟：用户说完 → 听到 AI 回复 < 2 秒
+总延迟：说完 → AI 语音回复 < 2 秒
 ```
+
+## 纠错三层体系
+
+- **即时层**：对话中回复末尾提 1-2 个关键错误
+- **课后层**：DeepSeek 1M 上下文全量分析（规划中）
+- **量化层**：评分曲线 + 雷达图 + 薄弱音素追踪（规划中）
 
 ## 目录结构
 
 ```
-english-coach/
+SpeakCAI/
 ├── shared/
 │   └── types.ts              # 前后端共享类型定义
 ├── client/                   # React 前端（端口 5173）
 │   └── src/
-│       ├── api/              # REST API 调用
-│       ├── components/       # UI 组件
-│       ├── hooks/            # 自定义 Hooks
-│       ├── views/            # 页面视图
-│       └── workers/          # AudioWorklet processor
+│       ├── App.tsx            # 主界面 + 对话逻辑
+│       ├── App.css            # 样式（含暗色模式）
+│       ├── hooks/             # useWebSocket / useAudioCapture
+│       └── workers/           # AudioWorklet processor
 ├── server/                   # Node.js 后端（端口 3000/3001）
 │   └── src/
-│       ├── index.ts          # 入口 + HTTP + 优雅退出
-│       ├── ws-server.ts      # WebSocket 服务
-│       ├── asr.ts            # 讯飞 ASR
-│       ├── tts.ts            # 讯飞 TTS
-│       ├── llm.ts            # DeepSeek 对话
-│       ├── correct.ts        # 纠错引擎
-│       ├── pronounce.ts      # 发音评测
-│       ├── report.ts         # 报告生成
-│       └── session.ts        # 会话管理
-└── .env.example              # API Key 模板
+│       ├── index.ts           # 入口 + HTTP + 优雅退出
+│       ├── ws-server.ts       # WebSocket 消息路由
+│       ├── asr.ts             # 讯飞 ASR
+│       ├── tts.ts             # 讯飞 TTS
+│       ├── pronounce.ts       # 讯飞 ISE 发音评测
+│       ├── llm.ts             # DeepSeek 流式对话
+│       └── session.ts         # 会话管理 + 系统提示词
+└── .env.example               # API Key 模板
 ```
 
 ## 快速开始
@@ -92,18 +90,25 @@ cd client && npm run dev
 
 | 依赖 | 用途 |
 |---|---|
-| 讯飞开放平台 | 实时语音识别、语音合成 |
-| DeepSeek | 对话生成与纠错分析 |
-| React / React Router | 前端框架 |
-| Express / ws | 后端 HTTP + WebSocket |
-| SQLite (better-sqlite3) | 对话数据持久化 |
+| 讯飞开放平台 | ASR / TTS / ISE 发音评测 |
+| DeepSeek | 对话生成与语法纠错 |
+| React + Vite | 前端框架与构建 |
+| Express + ws | HTTP + WebSocket |
 | TypeScript | 类型安全 |
-| ESLint / Prettier | 代码规范 |
+| ESLint + Prettier | 代码规范 |
 
-## 后续优化
+## 开发规划
 
-- 对话内容导出（PDF / Markdown）
-- 生词本与间隔复习
-- 多人角色扮演对话
-- 自定义场景模板
-- PWA 离线支持
+- [x] 项目脚手架 + WS 联通
+- [x] 音频采集 AudioWorklet
+- [x] 讯飞实时 ASR
+- [x] 实时字幕显示
+- [x] DeepSeek 流式对话
+- [x] 讯飞 TTS 语音合成
+- [x] 场景选择 + 三种纠错模式
+- [x] 讯飞 ISE 发音评测
+- [ ] 即时纠错气泡
+- [ ] 课后总结报告
+- [ ] 对话历史记录
+- [ ] 量化进度追踪
+- [ ] README + Demo 视频
