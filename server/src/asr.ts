@@ -36,17 +36,20 @@ function generateSignature(params: Record<string, string>, apiSecret: string): s
   return createHmac('sha1', apiSecret).update(baseString).digest('base64');
 }
 
-// ---- ISO 8601 with timezone offset ----
+// ---- ISO 8601 本地时间 + 时区偏移 ----
 function utcString(): string {
   const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const MM = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
   const offset = -d.getTimezoneOffset();
   const sign = offset >= 0 ? '+' : '-';
-  const tz =
-    sign +
-    String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0') +
-    String(Math.abs(offset) % 60).padStart(2, '0');
-  const iso = d.toISOString(); // "2025-09-04T15:38:07.000Z"
-  return iso.replace(/\.\d{3}Z$/, tz);
+  const tz = sign + pad(Math.floor(Math.abs(offset) / 60)) + pad(Math.abs(offset) % 60);
+  return `${yyyy}-${MM}-${dd}T${hh}:${mm}:${ss}${tz}`;
 }
 
 // ---- 讯飞返回的消息结构 ----
@@ -89,7 +92,7 @@ export class XunfeiASR {
   connect(): void {
     const { appId, apiKey, apiSecret } = this.config;
     const utc = utcString();
-    const lang = 'en';
+    const lang = 'autodialect';
     const audioEncode = 'pcm_s16le';
     const sampleRate = '16000';
 
@@ -110,7 +113,10 @@ export class XunfeiASR {
       .join('&');
 
     const url = `${ASR_URL}?${query}`;
-    console.log('🔊 讯飞 ASR 连接中:', url.slice(0, 150) + '...');
+    console.log('🔊 讯飞 ASR utc:', utc);
+    console.log('🔊 讯飞 ASR lang:', lang);
+    console.log('🔊 讯飞 ASR baseString (签名原文):',
+      Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&'));
 
     this.ws = new WebSocket(url);
 
@@ -151,6 +157,16 @@ export class XunfeiASR {
       } catch {
         // 忽略无法解析的帧
       }
+    });
+
+    // 捕获 HTTP 升级失败详情（如 401/403）
+    this.ws.on('unexpected-response', (_req, res) => {
+      console.error(`❌ 讯飞拒绝: HTTP ${res.statusCode} ${res.statusMessage}`);
+      let body = '';
+      res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      res.on('end', () => {
+        console.error('❌ 讯飞响应体:', body.slice(0, 500));
+      });
     });
 
     this.ws.on('error', (err) => {
