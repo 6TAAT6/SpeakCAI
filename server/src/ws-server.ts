@@ -317,12 +317,11 @@ export class WSServer {
   ): void {
     const session = this.sessionMap.get(ws);
     if (session) {
-      session.setScene(msg.payload.scene);
+      session.setConfig(msg.payload.scene, msg.payload.correctionMode);
       console.log(
-        `⚙️  场景切换: ${msg.payload.scene}（已清空历史）, 纠错模式: ${msg.payload.correctionMode}`,
+        `⚙️  场景: ${msg.payload.scene}, 纠错: ${msg.payload.correctionMode}`,
       );
     }
-    // TODO: PR7 纠正模式参数化
   }
 
   // ---- 清理 ----

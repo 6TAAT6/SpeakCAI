@@ -55,6 +55,28 @@ body {
   letter-spacing: -0.3px;
 }
 
+.config-selectors {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 12px;
+}
+
+.mini-select {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.75rem;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+
+.mini-select:focus {
+  border-color: var(--accent);
+}
+
 .status-badge {
   font-size: 0.8rem;
   font-weight: 500;

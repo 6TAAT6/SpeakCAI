@@ -2,7 +2,7 @@
 // 维护每个客户端的对话上下文（System Prompt + 历史消息）
 // 用于在 LLM 调用前组装完整的 messages 数组
 
-import type { Scene } from '../../shared/types.ts';
+import type { Scene, CorrectionMode } from '../../shared/types.ts';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -13,19 +13,22 @@ export class ConversationSession {
   readonly sessionId: string;
   readonly createdAt: Date;
   scene: Scene;
+  correctionMode: CorrectionMode;
   messages: ChatMessage[];
 
-  constructor(sessionId: string, scene: Scene = 'interview') {
+  constructor(sessionId: string, scene: Scene = 'interview', correctionMode: CorrectionMode = 'coach') {
     this.sessionId = sessionId;
     this.createdAt = new Date();
     this.scene = scene;
-    this.messages = [this.buildSystemPrompt(scene)];
+    this.correctionMode = correctionMode;
+    this.messages = [this.buildSystemPrompt(scene, correctionMode)];
   }
 
-  /** 更换场景时重建 System Prompt，清空历史对话 */
-  setScene(scene: Scene): void {
+  /** 更换场景或纠错模式时重建 System Prompt，清空历史对话 */
+  setConfig(scene: Scene, correctionMode: CorrectionMode): void {
     this.scene = scene;
-    this.messages = [this.buildSystemPrompt(scene)];
+    this.correctionMode = correctionMode;
+    this.messages = [this.buildSystemPrompt(scene, correctionMode)];
   }
 
   /** 添加用户消息 */
@@ -56,7 +59,7 @@ export class ConversationSession {
   }
 
   // ---- System Prompt ----
-  private buildSystemPrompt(scene: Scene): ChatMessage {
+  private buildSystemPrompt(scene: Scene, mode: CorrectionMode): ChatMessage {
     return {
       role: 'system',
       content: [
@@ -64,7 +67,7 @@ export class ConversationSession {
         '',
         BILINGUAL_INSTRUCTION,
         '',
-        CORRECTION_INSTRUCTION,
+        CORRECTION_PROMPTS[mode],
       ].join('\n'),
     };
   }
@@ -107,10 +110,29 @@ const BILINGUAL_INSTRUCTION = [
   'Never omit the Chinese line. Never add extra blank lines between them.',
 ].join('\n');
 
-const CORRECTION_INSTRUCTION = [
-  'Correction notes (教练模式):',
-  '- If the user makes a grammar or expression error, briefly note 1-2 key mistakes',
-  '  at the end of your response, after the Chinese translation, prefixed with "💡 Tips:".',
-  '- Focus on the most important errors, not every minor mistake.',
-  '- Be encouraging, not harsh.',
-].join('\n');
+// ---- 三种纠错模式 System Prompt ----
+const CORRECTION_PROMPTS: Record<CorrectionMode, string> = {
+  immersive: [
+    'Correction mode: 沉浸模式（仅在课后纠正）',
+    '- Do NOT correct any grammar or expression errors during the conversation.',
+    '- Just focus on keeping the conversation flowing naturally.',
+    '- Be encouraging and supportive.',
+  ].join('\n'),
+
+  coach: [
+    'Correction mode: 教练模式（轻量提醒）',
+    '- If the user makes a grammar or expression error, briefly note 1-2 key mistakes',
+    '  at the end of your response, after the Chinese translation, prefixed with "💡 Tips:".',
+    '- Focus on the most important errors, not every minor mistake.',
+    '- Be encouraging, not harsh.',
+  ].join('\n'),
+
+  strict: [
+    'Correction mode: 严师模式（追问重说）',
+    '- If the user makes a grammar or expression error, point it out clearly.',
+    '  Prefixed with "💡 Tips:" after the Chinese translation.',
+    '- Ask the user to repeat the sentence correctly.',
+    '  Prefixed with "🔁 Try again:" as a follow-up.',
+    '- Insist on correct grammar. Keep the user accountable.',
+  ].join('\n'),
+};
