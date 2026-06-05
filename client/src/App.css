@@ -195,7 +195,71 @@ body {
   100% { opacity: 0.8; }
 }
 
+/* ---- AI 对话回复 ---- */
+
+.ai-response-area {
+  width: 100%;
+  max-width: 680px;
+  padding: 16px 20px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  animation: slide-up 0.3s ease-out;
+}
+
+.ai-response-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.streaming-indicator {
+  font-size: 0.8rem;
+  color: var(--warning);
+  animation: blink-dot 0.8s ease-in-out infinite;
+}
+
+.interrupt-btn {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.interrupt-btn:hover {
+  background: #fef2f2;
+}
+
+.ai-response-text {
+  font-size: 1.1rem;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- 动画 ---- */
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 @keyframes pulse-recording {
   0%, 100% { opacity: 1; }
