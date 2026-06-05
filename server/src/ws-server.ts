@@ -8,6 +8,8 @@ import { DeepSeekLLM } from './llm.ts';
 import type { LLMConfig } from './llm.ts';
 import { XunfeiTTS } from './tts.ts';
 import type { TTSConfig } from './tts.ts';
+import { XunfeiISE } from './pronounce.ts';
+import type { ISEConfig } from './pronounce.ts';
 
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
@@ -27,6 +29,12 @@ const getTTSConfig = (): TTSConfig => ({
   apiSecret: process.env.XUNFEI_API_SECRET || '',
   voiceName: 'catherine', // 英文女声-Catherine
   speed: 50,
+});
+
+const getISEConfig = (): ISEConfig => ({
+  appId: process.env.XUNFEI_APP_ID || '',
+  apiKey: process.env.XUNFEI_API_KEY || '',
+  apiSecret: process.env.XUNFEI_API_SECRET || '',
 });
 
 function asrConfigured(): boolean {
@@ -52,6 +60,8 @@ export class WSServer {
   // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
   private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
   private ttsMap: Map<WebSocket, XunfeiTTS> = new Map();
+  // 每个客户端缓冲一句话的 PCM 音频帧，用于发音评测
+  private iseBuffer: Map<WebSocket, Buffer[]> = new Map();
 
   constructor(private port: number) {}
 
@@ -178,6 +188,7 @@ export class WSServer {
     if (!asr) {
       const pending: Buffer[] = [];
       this.pendingAudio.set(ws, pending);
+      this.iseBuffer.set(ws, []);
 
       asr = new XunfeiASR(getASRConfig(), {
         onReady: () => {
@@ -187,7 +198,7 @@ export class WSServer {
             for (const buf of buffered) {
               asr!.sendAudio(buf);
             }
-            this.pendingAudio.delete(ws);
+            this.pendingAudio.delete(ws); this.iseBuffer.delete(ws);
           }
         },
         onPartial: (text: string) => {
@@ -198,10 +209,13 @@ export class WSServer {
           console.log(`✅ final: "${text}"`);
           this.send(ws, { type: 'asr_final', text });
           this.handleUserInput(ws, text);
+          // 发音评测：将缓冲的音频帧发给讯飞 ISE
+          this.evaluatePronounce(ws, text);
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
-          this.pendingAudio.delete(ws);
+          this.pendingAudio.delete(ws); this.iseBuffer.delete(ws);
+          this.iseBuffer.delete(ws);
         },
       });
       asr.connect();
@@ -209,6 +223,10 @@ export class WSServer {
     }
 
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
+    // 缓冲音频帧供发音评测
+    const session = this.iseBuffer.get(ws);
+    if (session) session.push(buffer);
+
     const pending = this.pendingAudio.get(ws);
     if (pending) {
       pending.push(buffer);
@@ -277,6 +295,31 @@ export class WSServer {
       onError: (err: Error) => {
         console.error(`⚠️ TTS 错误: ${err.message}`);
       },
+    });
+  }
+
+  // ---- 发音评测 → 讯飞 ISE ----
+  private evaluatePronounce(ws: WebSocket, text: string): void {
+    const cfg = getISEConfig();
+    if (!cfg.appId || cfg.appId === 'your_app_id') return;
+    const chunks = this.iseBuffer.get(ws);
+    if (!chunks || chunks.length === 0) return;
+    const audio = Buffer.concat(chunks);
+    this.iseBuffer.set(ws, []); // 清空，准备下一句
+
+    const ise = new XunfeiISE(cfg);
+    ise.evaluate(text, audio, {
+      onResult: (result) => {
+        this.send(ws, {
+          type: 'pronounce_result',
+          totalScore: result.totalScore,
+          accuracyScore: result.accuracyScore,
+          fluencyScore: result.fluencyScore,
+          integrityScore: result.integrityScore,
+          weakPhones: result.weakPhones,
+        });
+      },
+      onError: () => { /* 评测失败不影响对话 */ },
     });
   }
 

@@ -35,6 +35,16 @@ export type WSMessage =
       corrections: CorrectionItem[];
     }
 
+  // 发音评测（后端 → 浏览器）
+  | {
+      type: 'pronounce_result';
+      totalScore: number;
+      accuracyScore: number;
+      fluencyScore: number;
+      integrityScore: number;
+      weakPhones: string[];
+    }
+
   // 打断信号（双向）
   | { type: 'interrupt' }
 
