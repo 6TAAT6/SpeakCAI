@@ -56,9 +56,11 @@ export class XunfeiISE {
     handler: ISEHandler,
   ): void {
     const url = buildAuthUrl(this.config.apiKey, this.config.apiSecret);
+    console.log('🔊 ISE 评测连接中...');
     this.ws = new WebSocket(url);
 
     this.ws.on('open', () => {
+      console.log('🔊 ISE 已连接，发送评测数据...');
       // 第一步：发送评测参数
       const paramFrame = JSON.stringify({
         common: { app_id: this.config.appId },

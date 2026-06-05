@@ -60,8 +60,8 @@ export class WSServer {
   // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
   private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
   private ttsMap: Map<WebSocket, XunfeiTTS> = new Map();
-  // 每个客户端缓冲一句话的 PCM 音频帧，用于发音评测
-  private iseBuffer: Map<WebSocket, Buffer[]> = new Map();
+  // 每个客户端缓冲一句话的音频帧 + 文本，用于发音评测
+  private iseBuffer: Map<WebSocket, { audio: Buffer[]; text: string }> = new Map();
 
   constructor(private port: number) {}
 
@@ -188,7 +188,7 @@ export class WSServer {
     if (!asr) {
       const pending: Buffer[] = [];
       this.pendingAudio.set(ws, pending);
-      this.iseBuffer.set(ws, []);
+      this.iseBuffer.set(ws, { audio: [], text: '' });
 
       asr = new XunfeiASR(getASRConfig(), {
         onReady: () => {
@@ -209,8 +209,9 @@ export class WSServer {
           console.log(`✅ final: "${text}"`);
           this.send(ws, { type: 'asr_final', text });
           this.handleUserInput(ws, text);
-          // 发音评测：将缓冲的音频帧发给讯飞 ISE
-          this.evaluatePronounce(ws, text);
+          // 记录最后一句文本，停止时统一评测
+          const ise = this.iseBuffer.get(ws);
+          if (ise) ise.text = text;
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
@@ -224,8 +225,8 @@ export class WSServer {
 
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
     // 缓冲音频帧供发音评测
-    const session = this.iseBuffer.get(ws);
-    if (session) session.push(buffer);
+    const ise = this.iseBuffer.get(ws);
+    if (ise) ise.audio.push(buffer);
 
     const pending = this.pendingAudio.get(ws);
     if (pending) {
@@ -302,10 +303,10 @@ export class WSServer {
   private evaluatePronounce(ws: WebSocket, text: string): void {
     const cfg = getISEConfig();
     if (!cfg.appId || cfg.appId === 'your_app_id') return;
-    const chunks = this.iseBuffer.get(ws);
-    if (!chunks || chunks.length === 0) return;
-    const audio = Buffer.concat(chunks);
-    this.iseBuffer.set(ws, []); // 清空，准备下一句
+    const buf = this.iseBuffer.get(ws);
+    if (!buf || buf.audio.length === 0) return;
+    const audio = Buffer.concat(buf.audio);
+    this.iseBuffer.set(ws, { audio: [], text: '' });
 
     const ise = new XunfeiISE(cfg);
     ise.evaluate(text, audio, {
@@ -325,6 +326,12 @@ export class WSServer {
 
   // ---- 打断（仅影响当前客户端）----
   private handleInterrupt(ws: WebSocket): void {
+    // 打断时触发发音评测（利用已缓冲的音频 + 最后识别文本）
+    const buf = this.iseBuffer.get(ws);
+    if (buf && buf.audio.length > 0 && buf.text) {
+      this.evaluatePronounce(ws, buf.text);
+    }
+
     // 移除打断导致的截断 assistant 消息
     const session = this.sessionMap.get(ws);
     session?.popLastAssistant();
@@ -374,6 +381,11 @@ export class WSServer {
       asr.end();
       asr.disconnect();
       this.asrMap.delete(ws);
+    }
+    // 停止录音时触发发音评测
+    const buf = this.iseBuffer.get(ws);
+    if (buf && buf.audio.length > 0 && buf.text) {
+      this.evaluatePronounce(ws, buf.text);
     }
   }
 
