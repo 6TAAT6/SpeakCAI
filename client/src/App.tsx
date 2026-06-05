@@ -1,12 +1,33 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
 export function App() {
-  const { status, sessionId, messages } = useWebSocket('ws://localhost:3001');
+  const { status, sessionId, messages, lastMessage } = useWebSocket('ws://localhost:3001');
   const [frameCount, setFrameCount] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+
+  // ---- 字幕状态 ----
+  const [partialText, setPartialText] = useState('');
+  const [finalSegments, setFinalSegments] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    if (lastMessage.type === 'asr_partial') {
+      setPartialText(lastMessage.text);
+    } else if (lastMessage.type === 'asr_final') {
+      const text = lastMessage.text;
+      if (text) {
+        setPartialText('');
+        setFinalSegments((prev) => {
+          // 去重：避免与上一条 final 相同
+          if (prev.length > 0 && prev[prev.length - 1] === text) return prev;
+          return [...prev, text];
+        });
+      }
+    }
+  }, [lastMessage]);
 
   const statusIndicator = useMemo(() => {
     switch (status) {
@@ -41,6 +62,8 @@ export function App() {
     if (isRecording) {
       stop();
       setFrameCount(0);
+      setPartialText('');
+      setFinalSegments([]);
     } else {
       await start();
     }
@@ -72,6 +95,17 @@ export function App() {
       </header>
 
       <main className="app-main">
+        {(partialText || finalSegments.length > 0) && (
+          <div className="caption-area">
+            {finalSegments.map((text, i) => (
+              <p key={i} className="caption-final">
+                {text}
+              </p>
+            ))}
+            {partialText && <p className="caption-partial">{partialText}</p>}
+          </div>
+        )}
+
         {isRecording ? (
           <div className="recording-indicator">
             <span className="recording-dot" />
