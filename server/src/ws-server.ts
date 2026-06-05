@@ -22,7 +22,10 @@ const getLLMConfig = (): LLMConfig => ({
 function asrConfigured(): boolean {
   const cfg = getASRConfig();
   return Boolean(
-    cfg.appId && cfg.apiKey && cfg.apiSecret && cfg.appId !== 'your_app_id' && cfg.apiKey !== 'your_api_key',
+    cfg.appId && cfg.apiKey && cfg.apiSecret &&
+    cfg.appId !== 'your_app_id' &&
+    cfg.apiKey !== 'your_api_key' &&
+    cfg.apiSecret !== 'your_api_secret',
   );
 }
 

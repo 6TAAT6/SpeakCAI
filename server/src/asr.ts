@@ -2,10 +2,10 @@
 // 每个浏览器客户端对应一个 XunfeiASR 实例，管理独立的讯飞 WebSocket 连接
 //
 // 协议：浏览器 WebSocket → 讯飞 ASR WebSocket → 识别文本流
-// 参考：https://www.xfyun.cn/doc/asr/rtasr/API.html
+// 参考：https://www.xfyun.cn/doc/spark/asr_llm/rtasr_llm.html
 
 import WebSocket from 'ws';
-import { createHmac } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 
 // ---- 配置 ----
 export interface ASRConfig {
@@ -18,48 +18,99 @@ export interface ASRConfig {
 export interface ASREventHandler {
   /** 中间识别结果（边说边出） */
   onPartial: (text: string) => void;
-  /** 最终识别结果（VAD 后确认） */
+  /** 最终识别结果（整句确认） */
   onFinal: (text: string) => void;
   /** 连接/识别异常 */
   onError: (error: Error) => void;
 }
 
-// 讯飞实时语音转写 WebSocket 地址
-const ASR_URL = 'wss://rtasr.xfyun.cn/v1/ws';
+// 实时语音转写大模型 WebSocket 地址
+const ASR_URL = 'wss://office-api-ast-dx.iflyaisol.com/ast/communicate/v1';
 
 // ---- 签名 ----
-function generateSign(appId: string, ts: string, apiSecret: string): string {
-  return createHmac('sha256', apiSecret).update(appId + ts).digest('base64');
+function generateSignature(params: Record<string, string>, apiSecret: string): string {
+  const sorted = Object.keys(params).sort();
+  const baseString = sorted
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+    .join('&');
+  return createHmac('sha1', apiSecret).update(baseString).digest('base64');
 }
 
-// 讯飞 ASR 返回的原始 JSON 结构（嵌套在 data 字段中）
-interface ASRResultRaw {
+// ---- ISO 8601 with timezone offset ----
+function utcString(): string {
+  const d = new Date();
+  const offset = -d.getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const tz =
+    sign +
+    String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0') +
+    String(Math.abs(offset) % 60).padStart(2, '0');
+  const iso = d.toISOString(); // "2025-09-04T15:38:07.000Z"
+  return iso.replace(/\.\d{3}Z$/, tz);
+}
+
+// ---- 讯飞返回的消息结构 ----
+interface ASRMessage {
+  msg_type?: string;
+  res_type?: string;
+  action?: string;
+  code?: string;
+  desc?: string;
+  data?: string | ASRDataPayload;
+  sid?: string;
+}
+
+interface ASRDataPayload {
+  seg_id?: number;
   cn?: {
     st?: {
       rt?: Array<{
-        ws: Array<{ cw: Array<{ w: string }> }>;
-        type: string; // "0" = partial, "1" = final
+        ws: Array<{ cw: Array<{ w: string; wp?: string; lg?: string }> }>;
       }>;
+      type: string;
     };
   };
+  ls?: boolean;
 }
 
 export class XunfeiASR {
   private ws: WebSocket | null = null;
   private readonly config: ASRConfig;
   private readonly handler: ASREventHandler;
+  private readonly uuid: string;
 
   constructor(config: ASRConfig, handler: ASREventHandler) {
     this.config = config;
     this.handler = handler;
+    this.uuid = randomUUID();
   }
 
   /** 建立与讯飞 ASR 的 WebSocket 连接 */
   connect(): void {
     const { appId, apiKey, apiSecret } = this.config;
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const signa = generateSign(appId, ts, apiSecret);
-    const url = `${ASR_URL}?appid=${appId}&ts=${ts}&signa=${encodeURIComponent(signa)}&apikey=${encodeURIComponent(apiKey)}`;
+    const utc = utcString();
+    const lang = 'en';
+    const audioEncode = 'pcm_s16le';
+    const sampleRate = '16000';
+
+    // 签名参数（不含 signature 本身，按字母序排列）
+    const params: Record<string, string> = {
+      accessKeyId: apiKey,
+      appId,
+      audio_encode: audioEncode,
+      lang,
+      samplerate: sampleRate,
+      utc,
+      uuid: this.uuid,
+    };
+
+    const signature = generateSignature(params, apiSecret);
+    const query = Object.entries({ ...params, signature })
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&');
+
+    const url = `${ASR_URL}?${query}`;
+    console.log('🔊 讯飞 ASR 连接中:', url.slice(0, 150) + '...');
 
     this.ws = new WebSocket(url);
 
@@ -69,13 +120,32 @@ export class XunfeiASR {
 
     this.ws.on('message', (raw: Buffer) => {
       try {
-        const msg = JSON.parse(raw.toString());
-        const result = this.extractResult(msg);
-        if (result) {
-          if (result.isFinal) {
-            this.handler.onFinal(result.text);
-          } else {
-            this.handler.onPartial(result.text);
+        const msg: ASRMessage = JSON.parse(raw.toString());
+        const preview = JSON.stringify(msg).slice(0, 300);
+        console.log('📩 讯飞消息:', preview);
+
+        // 握手成功 / 心跳
+        if (msg.action === 'started') {
+          console.log('✅ 讯飞 ASR 握手成功');
+          return;
+        }
+
+        // 错误帧
+        if (msg.action === 'error' || (msg.code && msg.code !== '0')) {
+          console.error('❌ 讯飞返回错误:', preview);
+          return;
+        }
+
+        // 识别结果
+        if (msg.msg_type === 'result' && msg.res_type === 'asr') {
+          const data = msg.data as ASRDataPayload;
+          const result = this.extractResult(data);
+          if (result) {
+            if (result.isFinal) {
+              this.handler.onFinal(result.text);
+            } else {
+              this.handler.onPartial(result.text);
+            }
           }
         }
       } catch {
@@ -89,7 +159,9 @@ export class XunfeiASR {
     });
 
     this.ws.on('close', (code, reason) => {
-      console.log(`🔇 讯飞 ASR 断开 (code: ${code}, reason: ${reason?.toString() || 'N/A'})`);
+      console.log(
+        `🔇 讯飞 ASR 断开 (code: ${code}, reason: ${reason?.toString() || 'N/A'})`,
+      );
     });
   }
 
@@ -115,28 +187,19 @@ export class XunfeiASR {
     }
   }
 
-  // ---- 解析讯飞返回的嵌套 JSON ----
-  private extractResult(msg: Record<string, unknown>): { text: string; isFinal: boolean } | null {
-    const { action, data } = msg as { action?: string; data?: string };
+  // ---- 解析讯飞返回的识别结果 ----
+  private extractResult(data: ASRDataPayload): { text: string; isFinal: boolean } | null {
+    const st = data?.cn?.st;
+    if (!st) return null;
 
-    // 忽略心跳和错误帧
-    if (!action || action === 'error') return null;
-    if (!data) return null;
-
-    try {
-      const parsed: ASRResultRaw = JSON.parse(data);
-      const rt = parsed?.cn?.st?.rt?.[0];
-      if (!rt) return null;
-
-      const text = rt.ws
-        ?.map((seg) => seg.cw.map((c) => c.w).join(''))
+    const text =
+      st.rt
+        ?.flatMap((seg) => seg.ws.flatMap((w) => w.cw.map((c) => c.w)))
         .join('') || '';
 
-      if (!text) return null;
+    if (!text) return null;
 
-      return { text, isFinal: rt.type === '1' };
-    } catch {
-      return null;
-    }
+    // type: "0" = 确定性结果（final）, "1" = 中间结果（partial）
+    return { text, isFinal: st.type === '0' };
   }
 }
