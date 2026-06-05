@@ -49,6 +49,7 @@ export function App() {
     setFinalSegments([]);
     setPartialText('');
     setInterrupted(false);
+    setTtsPlaying(false);
     stopAudio();
   }, [stopAudio]);
 
@@ -298,7 +299,7 @@ export function App() {
           {isRecording ? '⏹ 停止' : '🎤 开始对话'}
         </button>
 
-        {(aiStreaming || ttsPlaying || interrupted) && (
+        {(aiSegments.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
           <button onClick={handleInterruptToggle} className="ctrl-btn">
             {interrupted ? '▶ 继续' : '⏹ 打断'}
           </button>
