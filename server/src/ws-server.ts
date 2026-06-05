@@ -7,24 +7,29 @@ import { ConversationSession } from './session.ts';
 import { DeepSeekLLM } from './llm.ts';
 import type { LLMConfig } from './llm.ts';
 
-// ---- 环境配置 ----
-const asrConfig: ASRConfig = {
+// ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
+const getASRConfig = (): ASRConfig => ({
   appId: process.env.XUNFEI_APP_ID || '',
+  apiKey: process.env.XUNFEI_API_KEY || '',
   apiSecret: process.env.XUNFEI_API_SECRET || '',
-};
+});
 
-const llmConfig: LLMConfig = {
+const getLLMConfig = (): LLMConfig => ({
   apiKey: process.env.DEEPSEEK_API_KEY || '',
   model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
-};
+});
 
 function asrConfigured(): boolean {
-  return Boolean(asrConfig.appId && asrConfig.apiSecret && asrConfig.appId !== 'your_app_id');
+  const cfg = getASRConfig();
+  return Boolean(
+    cfg.appId && cfg.apiKey && cfg.apiSecret && cfg.appId !== 'your_app_id' && cfg.apiKey !== 'your_api_key',
+  );
 }
 
-const llmConfigured = (): boolean => {
-  return Boolean(llmConfig.apiKey && llmConfig.apiKey !== 'your_deepseek_api_key');
-};
+function llmConfigured(): boolean {
+  const cfg = getLLMConfig();
+  return Boolean(cfg.apiKey && cfg.apiKey !== 'your_deepseek_api_key');
+}
 
 export class WSServer {
   private wss: WebSocketServer | null = null;
@@ -58,7 +63,7 @@ export class WSServer {
       this.sessionMap.set(ws, session);
 
       if (llmConfigured()) {
-        this.llmMap.set(ws, new DeepSeekLLM(llmConfig));
+        this.llmMap.set(ws, new DeepSeekLLM(getLLMConfig()));
       }
 
       console.log(`🔗 新连接: ${sessionId.slice(0, 8)} (当前在线: ${this.clients.size})`);
@@ -141,7 +146,7 @@ export class WSServer {
 
     let asr = this.asrMap.get(ws);
     if (!asr) {
-      asr = new XunfeiASR(asrConfig, {
+      asr = new XunfeiASR(getASRConfig(), {
         onPartial: (text: string) => {
           this.send(ws, { type: 'asr_partial', text });
         },

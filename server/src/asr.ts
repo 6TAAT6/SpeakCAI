@@ -10,6 +10,7 @@ import { createHmac } from 'crypto';
 // ---- 配置 ----
 export interface ASRConfig {
   appId: string;
+  apiKey: string;
   apiSecret: string;
 }
 
@@ -55,10 +56,10 @@ export class XunfeiASR {
 
   /** 建立与讯飞 ASR 的 WebSocket 连接 */
   connect(): void {
-    const { appId, apiSecret } = this.config;
+    const { appId, apiKey, apiSecret } = this.config;
     const ts = Math.floor(Date.now() / 1000).toString();
     const signa = generateSign(appId, ts, apiSecret);
-    const url = `${ASR_URL}?appid=${appId}&ts=${ts}&signa=${encodeURIComponent(signa)}`;
+    const url = `${ASR_URL}?appid=${appId}&ts=${ts}&signa=${encodeURIComponent(signa)}&apikey=${encodeURIComponent(apiKey)}`;
 
     this.ws = new WebSocket(url);
 
