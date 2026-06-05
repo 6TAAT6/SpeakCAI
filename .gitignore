@@ -40,3 +40,6 @@ coverage/
 *.db
 *.sqlite
 server/data/
+
+# === 开发辅助（不上传）===
+CLAUDE.md
