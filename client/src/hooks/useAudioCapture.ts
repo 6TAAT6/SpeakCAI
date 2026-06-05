@@ -101,8 +101,14 @@ export function useAudioCapture({ onAudioFrame }: UseAudioCaptureOptions): UseAu
         moduleLoadedRef.current = true;
       }
 
-      // ---- 3. 获取麦克风 ----
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // ---- 3. 获取麦克风（回声消除 + 降噪，避免 TTS 播放被重新采集）----
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
 
       // ---- 4. 创建音频管道：麦克风 → SourceNode → WorkletNode（仅采集，不播放）----

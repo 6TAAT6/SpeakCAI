@@ -104,9 +104,8 @@ export class DeepSeekLLM {
 
       handler.onDone(fullText);
     } catch (err) {
-      // AbortError 用 name 检测而非 instanceof，兼容 Node.js 各版本
+      // AbortError: 用户主动打断，不触发任何回调
       if (err instanceof Error && err.name === 'AbortError') {
-        handler.onDone(fullText);
         return;
       }
       handler.onError(err instanceof Error ? err : new Error(String(err)));

@@ -218,16 +218,17 @@ export class WSServer {
   }
 
   // ---- 用户输入 → LLM ----
-  private async handleUserInput(ws: WebSocket, text: string): Promise<void> {
+  private async handleUserInput(ws: WebSocket, text: string, isResume = false): Promise<void> {
     const llm = this.llmMap.get(ws);
     if (!llm) return;
 
     const session = this.sessionMap.get(ws);
     if (!session) return;
 
-    session.addUserMessage(text);
+    if (!isResume) session.addUserMessage(text);
 
     let llmBuffer = '';
+    let aborted = false;
 
     await llm.chat(session.getMessages(), {
       onStream: (chunk: string) => {
@@ -235,7 +236,7 @@ export class WSServer {
         this.send(ws, { type: 'llm_stream', text: chunk });
       },
       onDone: (fullText: string) => {
-        if (fullText) {
+        if (fullText && !aborted) {
           session.addAssistantMessage(fullText);
         }
         this.send(ws, { type: 'llm_done' });
@@ -281,6 +282,10 @@ export class WSServer {
 
   // ---- 打断（仅影响当前客户端）----
   private handleInterrupt(ws: WebSocket): void {
+    // 移除打断导致的截断 assistant 消息
+    const session = this.sessionMap.get(ws);
+    session?.popLastAssistant();
+
     // 中断当前客户端的 LLM 流式输出
     const llm = this.llmMap.get(ws);
     llm?.abort();
@@ -295,30 +300,14 @@ export class WSServer {
     }
   }
 
-  // ---- 继续对话（打断后，用已有上下文重跑 LLM）----
-  private async handleResume(ws: WebSocket): Promise<void> {
-    const llm = this.llmMap.get(ws);
-    if (!llm) return;
+  // ---- 继续对话（打断后，复用已有上下文重新生成）----
+  private handleResume(ws: WebSocket): void {
+    // 取最后一条用户消息，重新走 LLM（不重复添加到会话）
     const session = this.sessionMap.get(ws);
     if (!session) return;
-
-    const messages = session.getMessages();
-    let fullText = '';
-    await llm.chat(messages, {
-      onStream: (chunk: string) => {
-        fullText += chunk;
-        this.send(ws, { type: 'llm_stream', text: chunk });
-      },
-      onDone: () => {
-        if (fullText) session.addAssistantMessage(fullText);
-        this.send(ws, { type: 'llm_done' });
-        this.handleTTS(ws, fullText);
-      },
-      onError: (err: Error) => {
-        console.error(`⚠️ LLM 错误: ${err.message}`);
-        this.send(ws, { type: 'llm_done' });
-      },
-    });
+    const lastUser = session.getMessages().filter((m) => m.role === 'user').pop();
+    if (!lastUser) return;
+    this.handleUserInput(ws, lastUser.content, true);
   }
 
   // ---- 配置更新 ----
