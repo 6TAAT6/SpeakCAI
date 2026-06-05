@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { useWebSocket } from './hooks/useWebSocket.ts';
+import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
 export function App() {
-  const { status, sessionId, messages, lastMessage } = useWebSocket('ws://localhost:3001');
+  const { status, sessionId, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
