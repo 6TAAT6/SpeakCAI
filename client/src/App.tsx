@@ -2,18 +2,17 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
+interface Turn { role: 'user' | 'ai'; text: string }
+
 export function App() {
   const { status, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  // ---- 字幕状态 ----
+  // ---- 对话时间线 ----
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [partialText, setPartialText] = useState('');
-  const [finalSegments, setFinalSegments] = useState<string[]>([]);
-
-  // ---- AI 对话状态 ----
-  const [aiSegments, setAiSegments] = useState<string[]>([]);
   const [aiCurrent, setAiCurrent] = useState('');
   const [aiStreaming, setAiStreaming] = useState(false);
   const [interrupted, setInterrupted] = useState(false);
@@ -26,7 +25,6 @@ export function App() {
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
 
-  /** 停止当前播放的音频 */
   const stopAudio = useCallback(() => {
     try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
@@ -41,33 +39,25 @@ export function App() {
     setScene(s);
     setCorrectionMode(m);
     messagesRef.current.send({ type: 'config_update', payload: { scene: s, correctionMode: m } });
-    setAiSegments([]);
-    setAiSegments([]);
+    setTurns([]);
     setAiCurrent('');
     aiCurrentRef.current = '';
     setAiStreaming(false);
-    setFinalSegments([]);
     setPartialText('');
     setInterrupted(false);
     setTtsPlaying(false);
     stopAudio();
   }, [stopAudio]);
 
-  /** 播放 PCM 16kHz 16bit mono 音频 */
   const playPCM = useCallback((pcmData: Uint8Array) => {
     stopAudio();
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
-
     const samples = new Int16Array(pcmData.buffer);
     const float32 = new Float32Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      float32[i] = samples[i] / 32768;
-    }
-
+    for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768;
     const buffer = ctx.createBuffer(1, samples.length, 16000);
     buffer.copyToChannel(float32, 0);
-
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
@@ -76,11 +66,12 @@ export function App() {
     source.start();
   }, [stopAudio]);
 
-  // ---- 自动滚动到底部 ----
+  // ---- 自动滚动 ----
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [finalSegments, aiSegments, aiCurrent]);
+  }, [turns, aiCurrent]);
 
+  // ---- 消息处理 ----
   useEffect(() => {
     if (!lastMessage) return;
     switch (lastMessage.type) {
@@ -91,9 +82,9 @@ export function App() {
         const text = lastMessage.text;
         if (text) {
           setPartialText('');
-          setFinalSegments((prev) => {
-            if (prev.length > 0 && prev[prev.length - 1] === text) return prev;
-            return [...prev, text];
+          setTurns((prev) => {
+            if (prev.length > 0 && prev[prev.length - 1].role === 'user' && prev[prev.length - 1].text === text) return prev;
+            return [...prev, { role: 'user', text }];
           });
         }
         break;
@@ -106,7 +97,7 @@ export function App() {
       case 'llm_done': {
         const text = aiCurrentRef.current;
         if (text) {
-          setAiSegments((prev) => [...prev, text]);
+          setTurns((prev) => [...prev, { role: 'ai', text }]);
           aiCurrentRef.current = '';
           setAiCurrent('');
         }
@@ -121,11 +112,7 @@ export function App() {
           stopAudio();
         }
         audioChunksRef.current.push(
-          new Uint8Array(
-            atob(lastMessage.data)
-              .split('')
-              .map((c) => c.charCodeAt(0)),
-          ),
+          new Uint8Array(atob(lastMessage.data).split('').map((c) => c.charCodeAt(0))),
         );
         break;
       case 'tts_done': {
@@ -134,39 +121,34 @@ export function App() {
           const totalLen = chunks.reduce((s, c) => s + c.length, 0);
           const merged = new Uint8Array(totalLen);
           let offset = 0;
-          for (const c of chunks) {
-            merged.set(c, offset);
-            offset += c.length;
-          }
+          for (const c of chunks) { merged.set(c, offset); offset += c.length; }
           audioChunksRef.current = [];
           playPCM(merged);
-          const dur = (merged.byteLength / 2) / 16000 * 1000;
-          setTimeout(() => setTtsPlaying(false), dur);
+          setTimeout(() => setTtsPlaying(false), (merged.byteLength / 2) / 16000 * 1000);
         }
         break;
       }
     }
   }, [lastMessage, playPCM, stopAudio]);
 
+  // ---- 状态指示器 ----
   const statusIndicator = useMemo(() => {
     switch (status) {
-      case 'connecting':
-        return { emoji: '🟡', text: '连接中...', color: '#c6901a' };
-      case 'connected':
-        return { emoji: '🟢', text: '已就绪', color: '#1a8c4a' };
-      case 'disconnected':
-        return { emoji: '🔴', text: '已断连', color: '#b02828' };
-      case 'error':
-        return { emoji: '⚠️', text: '连接错误', color: '#b02828' };
+      case 'connecting': return { emoji: '🟡', text: '连接中...', color: '#c6901a' };
+      case 'connected':  return { emoji: '🟢', text: '已就绪',   color: '#1a8c4a' };
+      case 'disconnected': return { emoji: '🔴', text: '已断连', color: '#b02828' };
+      case 'error':      return { emoji: '⚠️', text: '连接错误', color: '#b02828' };
     }
   }, [status]);
 
+  // ---- 打断/继续 ----
   const handleInterruptToggle = () => {
     if (interrupted) {
       messages.send({ type: 'resume' });
       setInterrupted(false);
       setAiStreaming(true);
       setAiCurrent('');
+      aiCurrentRef.current = '';
     } else {
       messages.send({ type: 'interrupt' });
       setAiStreaming(false);
@@ -179,11 +161,7 @@ export function App() {
   // ---- 音频采集 ----
   const { start, stop, isRecording, error: captureError } = useAudioCapture({
     onAudioFrame: (frame) => {
-      messagesRef.current.send({
-        type: 'audio_frame',
-        data: Array.from(frame.data),
-        seq: frame.seq,
-      });
+      messagesRef.current.send({ type: 'audio_frame', data: Array.from(frame.data), seq: frame.seq });
       setFrameCount((c) => c + 1);
     },
   });
@@ -193,12 +171,11 @@ export function App() {
       stop();
       setFrameCount(0);
       setPartialText('');
-      setFinalSegments([]);
     } else {
-      setAiSegments([]);
+      setTurns([]);
       setAiCurrent('');
+      aiCurrentRef.current = '';
       setAiStreaming(false);
-      setFinalSegments([]);
       setPartialText('');
       setInterrupted(false);
       audioChunksRef.current = [];
@@ -207,28 +184,19 @@ export function App() {
   }, [isRecording, start, stop]);
 
   const wsReady = status === 'connected';
-  const hasConversation = partialText || finalSegments.length > 0 || aiSegments.length > 0 || aiCurrent || aiStreaming;
+  const hasConv = turns.length > 0 || partialText || aiCurrent || aiStreaming;
 
   return (
     <div className="app">
-      {/* ---- 顶部固定栏 ---- */}
       <header className="top-bar">
         <span className="brand">SpeakCAI</span>
         <div className="config-selectors">
-          <select
-            value={scene}
-            onChange={(e) => updateConfig(e.target.value as typeof scene, correctionMode)}
-            className="mini-select"
-          >
+          <select value={scene} onChange={(e) => updateConfig(e.target.value as typeof scene, correctionMode)} className="mini-select">
             <option value="interview">💼 面试</option>
             <option value="ordering">🍽️ 点餐</option>
             <option value="meeting">📊 会议</option>
           </select>
-          <select
-            value={correctionMode}
-            onChange={(e) => updateConfig(scene, e.target.value as typeof correctionMode)}
-            className="mini-select"
-          >
+          <select value={correctionMode} onChange={(e) => updateConfig(scene, e.target.value as typeof correctionMode)} className="mini-select">
             <option value="immersive">🌊 沉浸</option>
             <option value="coach">🎯 教练</option>
             <option value="strict">📏 严师</option>
@@ -239,23 +207,21 @@ export function App() {
         </span>
       </header>
 
-      {/* ---- 对话滚动区 ---- */}
       <main className="chat-area">
-        {!hasConversation && !isRecording && !captureError && (
-          <p className="placeholder">
-            {wsReady ? '点击底部按钮开始录音对话' : '正在建立连接，请确保服务端已启动...'}
-          </p>
+        {!hasConv && !isRecording && !captureError && (
+          <p className="placeholder">{wsReady ? '点击底部按钮开始录音对话' : '正在建立连接...'}</p>
         )}
-
         {captureError && <p className="error-message">{captureError}</p>}
 
-        {finalSegments.map((text, i) => (
-          <div key={`u-${i}`} className="bubble user-bubble">
-            <span className="bubble-label">You</span>
-            <p>{text}</p>
+        {/* 已完成对话 — 按时间线交替显示 */}
+        {turns.map((t, i) => (
+          <div key={i} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
+            <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+            <p>{t.text}</p>
           </div>
         ))}
 
+        {/* 当前正在说的 partial */}
         {partialText && (
           <div className="bubble user-bubble partial">
             <span className="bubble-label">You</span>
@@ -263,15 +229,9 @@ export function App() {
           </div>
         )}
 
-        {aiSegments.map((text, i) => (
-          <div key={`a-${i}`} className="bubble ai-bubble">
-            <span className="bubble-label">🤖 AI</span>
-            <p>{text}</p>
-          </div>
-        ))}
-
+        {/* AI 流式输出中 */}
         {(aiCurrent || aiStreaming) && (
-          <div className="bubble ai-bubble streaming">
+          <div className="bubble ai-bubble">
             <div className="bubble-header">
               <span className="bubble-label">🤖 AI</span>
               {aiStreaming && <span className="streaming-dot" />}
@@ -283,23 +243,14 @@ export function App() {
         <div ref={chatEndRef} />
       </main>
 
-      {/* ---- 底部录音控制栏 ---- */}
       <footer className="bottom-bar">
         {isRecording && (
-          <span className="record-timer">
-            ● {frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s
-          </span>
+          <span className="record-timer">● {frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s</span>
         )}
-
-        <button
-          onClick={handleRecordToggle}
-          disabled={!wsReady}
-          className={`record-btn ${isRecording ? 'recording' : ''}`}
-        >
+        <button onClick={handleRecordToggle} disabled={!wsReady} className={`record-btn ${isRecording ? 'recording' : ''}`}>
           {isRecording ? '⏹ 停止' : '🎤 开始对话'}
         </button>
-
-        {(aiSegments.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
+        {(turns.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
           <button onClick={handleInterruptToggle} className="ctrl-btn">
             {interrupted ? '▶ 继续' : '⏹ 打断'}
           </button>

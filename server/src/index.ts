@@ -16,7 +16,7 @@ const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
 
 // ---- HTTP 服务器（REST API）----
 const app = express();
-app.use(cors({ origin: `http://localhost:${process.env.CLIENT_PORT || '5173'}` }));
+app.use(cors());
 app.use(express.json());
 
 // 健康检查

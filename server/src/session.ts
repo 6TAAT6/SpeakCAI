@@ -1,7 +1,4 @@
 // ===== 对话会话管理 =====
-// 维护每个客户端的对话上下文（System Prompt + 历史消息）
-// 用于在 LLM 调用前组装完整的 messages 数组
-
 import type { Scene, CorrectionMode } from '../../shared/types.ts';
 
 export interface ChatMessage {
@@ -16,7 +13,11 @@ export class ConversationSession {
   correctionMode: CorrectionMode;
   messages: ChatMessage[];
 
-  constructor(sessionId: string, scene: Scene = 'interview', correctionMode: CorrectionMode = 'coach') {
+  constructor(
+    sessionId: string,
+    scene: Scene = 'interview',
+    correctionMode: CorrectionMode = 'coach',
+  ) {
     this.sessionId = sessionId;
     this.createdAt = new Date();
     this.scene = scene;
@@ -24,41 +25,37 @@ export class ConversationSession {
     this.messages = [this.buildSystemPrompt(scene, correctionMode)];
   }
 
-  /** 更换场景或纠错模式时重建 System Prompt，清空历史对话 */
   setConfig(scene: Scene, correctionMode: CorrectionMode): void {
     this.scene = scene;
     this.correctionMode = correctionMode;
     this.messages = [this.buildSystemPrompt(scene, correctionMode)];
   }
 
-  /** 添加用户消息 */
   addUserMessage(text: string): void {
     this.messages.push({ role: 'user', content: text });
   }
 
-  /** 移除最后一条 assistant 消息（打断后去除截断回复） */
   popLastAssistant(): void {
-    if (this.messages.length > 1 && this.messages[this.messages.length - 1].role === 'assistant') {
+    if (
+      this.messages.length > 1 &&
+      this.messages[this.messages.length - 1].role === 'assistant'
+    ) {
       this.messages.pop();
     }
   }
 
-  /** 添加助手回复 */
   addAssistantMessage(text: string): void {
     this.messages.push({ role: 'assistant', content: text });
   }
 
-  /** 获取传给 LLM 的完整消息数组（副本，防止外部修改内部状态） */
   getMessages(): ChatMessage[] {
     return [...this.messages];
   }
 
-  /** 统计对话轮数（user+assistant 为一轮） */
   get turnCount(): number {
     return this.messages.filter((m) => m.role === 'user').length;
   }
 
-  // ---- System Prompt ----
   private buildSystemPrompt(scene: Scene, mode: CorrectionMode): ChatMessage {
     return {
       role: 'system',
@@ -73,7 +70,7 @@ export class ConversationSession {
   }
 }
 
-// ---- 场景 System Prompt ----
+// ---- 场景 ----
 const SCENE_PROMPTS: Record<Scene, string> = {
   interview: [
     'You are a professional English interview coach. The user is practicing for a job interview.',
@@ -110,7 +107,6 @@ const BILINGUAL_INSTRUCTION = [
   'Never omit the Chinese line. Never add extra blank lines between them.',
 ].join('\n');
 
-// ---- 三种纠错模式 System Prompt ----
 const CORRECTION_PROMPTS: Record<CorrectionMode, string> = {
   immersive: [
     'Correction mode: 沉浸模式（仅在课后纠正）',
