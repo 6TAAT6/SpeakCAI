@@ -13,7 +13,8 @@ export function App() {
   const [finalSegments, setFinalSegments] = useState<string[]>([]);
 
   // ---- AI 对话状态 ----
-  const [aiText, setAiText] = useState('');
+  const [aiSegments, setAiSegments] = useState<string[]>([]);
+  const [aiCurrent, setAiCurrent] = useState('');
   const [aiStreaming, setAiStreaming] = useState(false);
   const [interrupted, setInterrupted] = useState(false);
 
@@ -22,6 +23,8 @@ export function App() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const aiCurrentRef = useRef('');
+  const [ttsPlaying, setTtsPlaying] = useState(false);
 
   /** 停止当前播放的音频 */
   const stopAudio = useCallback(() => {
@@ -29,6 +32,26 @@ export function App() {
     activeSourceRef.current = null;
     audioChunksRef.current = [];
   }, []);
+
+  // ---- 场景 + 纠错模式 ----
+  const [scene, setScene] = useState<'interview' | 'ordering' | 'meeting'>('interview');
+  const [correctionMode, setCorrectionMode] = useState<'immersive' | 'coach' | 'strict'>('coach');
+
+  const updateConfig = useCallback((s: typeof scene, m: typeof correctionMode) => {
+    setScene(s);
+    setCorrectionMode(m);
+    messagesRef.current.send({ type: 'config_update', payload: { scene: s, correctionMode: m } });
+    setAiSegments([]);
+    setAiSegments([]);
+    setAiCurrent('');
+    aiCurrentRef.current = '';
+    setAiStreaming(false);
+    setFinalSegments([]);
+    setPartialText('');
+    setInterrupted(false);
+    setTtsPlaying(false);
+    stopAudio();
+  }, [stopAudio]);
 
   /** 播放 PCM 16kHz 16bit mono 音频 */
   const playPCM = useCallback((pcmData: Uint8Array) => {
@@ -56,7 +79,7 @@ export function App() {
   // ---- 自动滚动到底部 ----
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [finalSegments, aiText]);
+  }, [finalSegments, aiSegments, aiCurrent]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -77,13 +100,22 @@ export function App() {
       }
       case 'llm_stream':
         setAiStreaming(true);
-        setAiText((prev) => prev + lastMessage.text);
+        aiCurrentRef.current += lastMessage.text;
+        setAiCurrent(aiCurrentRef.current);
         break;
-      case 'llm_done':
+      case 'llm_done': {
+        const text = aiCurrentRef.current;
+        if (text) {
+          setAiSegments((prev) => [...prev, text]);
+          aiCurrentRef.current = '';
+          setAiCurrent('');
+        }
         setAiStreaming(false);
         setInterrupted(false);
         break;
+      }
       case 'tts_audio':
+        setTtsPlaying(true);
         if (lastMessage.chunkIndex === 0) {
           audioChunksRef.current = [];
           stopAudio();
@@ -108,6 +140,8 @@ export function App() {
           }
           audioChunksRef.current = [];
           playPCM(merged);
+          const dur = (merged.byteLength / 2) / 16000 * 1000;
+          setTimeout(() => setTtsPlaying(false), dur);
         }
         break;
       }
@@ -132,10 +166,11 @@ export function App() {
       messages.send({ type: 'resume' });
       setInterrupted(false);
       setAiStreaming(true);
-      setAiText('');
+      setAiCurrent('');
     } else {
       messages.send({ type: 'interrupt' });
       setAiStreaming(false);
+      setTtsPlaying(false);
       setInterrupted(true);
       stopAudio();
     }
@@ -160,7 +195,8 @@ export function App() {
       setPartialText('');
       setFinalSegments([]);
     } else {
-      setAiText('');
+      setAiSegments([]);
+      setAiCurrent('');
       setAiStreaming(false);
       setFinalSegments([]);
       setPartialText('');
@@ -171,13 +207,33 @@ export function App() {
   }, [isRecording, start, stop]);
 
   const wsReady = status === 'connected';
-  const hasConversation = partialText || finalSegments.length > 0 || aiText || aiStreaming;
+  const hasConversation = partialText || finalSegments.length > 0 || aiSegments.length > 0 || aiCurrent || aiStreaming;
 
   return (
     <div className="app">
       {/* ---- 顶部固定栏 ---- */}
       <header className="top-bar">
         <span className="brand">SpeakCAI</span>
+        <div className="config-selectors">
+          <select
+            value={scene}
+            onChange={(e) => updateConfig(e.target.value as typeof scene, correctionMode)}
+            className="mini-select"
+          >
+            <option value="interview">💼 面试</option>
+            <option value="ordering">🍽️ 点餐</option>
+            <option value="meeting">📊 会议</option>
+          </select>
+          <select
+            value={correctionMode}
+            onChange={(e) => updateConfig(scene, e.target.value as typeof correctionMode)}
+            className="mini-select"
+          >
+            <option value="immersive">🌊 沉浸</option>
+            <option value="coach">🎯 教练</option>
+            <option value="strict">📏 严师</option>
+          </select>
+        </div>
         <span className="status-badge" style={{ color: statusIndicator.color }}>
           {statusIndicator.emoji} {statusIndicator.text}
         </span>
@@ -207,13 +263,20 @@ export function App() {
           </div>
         )}
 
-        {(aiText || aiStreaming) && (
-          <div className="bubble ai-bubble">
+        {aiSegments.map((text, i) => (
+          <div key={`a-${i}`} className="bubble ai-bubble">
+            <span className="bubble-label">🤖 AI</span>
+            <p>{text}</p>
+          </div>
+        ))}
+
+        {(aiCurrent || aiStreaming) && (
+          <div className="bubble ai-bubble streaming">
             <div className="bubble-header">
               <span className="bubble-label">🤖 AI</span>
               {aiStreaming && <span className="streaming-dot" />}
             </div>
-            <p>{aiText || '...'}</p>
+            <p>{aiCurrent || '...'}</p>
           </div>
         )}
 
@@ -236,7 +299,7 @@ export function App() {
           {isRecording ? '⏹ 停止' : '🎤 开始对话'}
         </button>
 
-        {(aiStreaming || interrupted) && (
+        {(aiSegments.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
           <button onClick={handleInterruptToggle} className="ctrl-btn">
             {interrupted ? '▶ 继续' : '⏹ 打断'}
           </button>
