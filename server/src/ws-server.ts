@@ -3,22 +3,36 @@ import { v4 as uuidv4 } from 'uuid';
 import type { WSMessage } from '../../shared/types.ts';
 import { XunfeiASR } from './asr.ts';
 import type { ASRConfig } from './asr.ts';
+import { ConversationSession } from './session.ts';
+import { DeepSeekLLM } from './llm.ts';
+import type { LLMConfig } from './llm.ts';
 
-// 从环境变量读取讯飞配置（ASR 和 TTS 共用同一套 Key）
+// ---- 环境配置 ----
 const asrConfig: ASRConfig = {
   appId: process.env.XUNFEI_APP_ID || '',
   apiSecret: process.env.XUNFEI_API_SECRET || '',
+};
+
+const llmConfig: LLMConfig = {
+  apiKey: process.env.DEEPSEEK_API_KEY || '',
+  model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
 };
 
 function asrConfigured(): boolean {
   return Boolean(asrConfig.appId && asrConfig.apiSecret && asrConfig.appId !== 'your_app_id');
 }
 
+const llmConfigured = (): boolean => {
+  return Boolean(llmConfig.apiKey && llmConfig.apiKey !== 'your_deepseek_api_key');
+};
+
 export class WSServer {
   private wss: WebSocketServer | null = null;
   private clients: Map<WebSocket, { sessionId: string; createdAt: Date }> = new Map();
-  // 每个浏览器客户端对应一个独立的讯飞 ASR 连接
   private asrMap: Map<WebSocket, XunfeiASR> = new Map();
+  private sessionMap: Map<WebSocket, ConversationSession> = new Map();
+  // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
+  private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
 
   constructor(private port: number) {}
 
@@ -28,7 +42,10 @@ export class WSServer {
     this.wss.on('listening', () => {
       console.log(`✅ WebSocket 服务已启动 → ws://localhost:${this.port}`);
       if (!asrConfigured()) {
-        console.warn('⚠️  讯飞 ASR 未配置（缺少 XUNFEI_APP_ID / XUNFEI_API_SECRET），语音识别不可用');
+        console.warn('⚠️  讯飞 ASR 未配置，语音识别不可用');
+      }
+      if (!llmConfigured()) {
+        console.warn('⚠️  DeepSeek 未配置（缺少 DEEPSEEK_API_KEY），AI 对话不可用');
       }
     });
 
@@ -36,12 +53,18 @@ export class WSServer {
       const sessionId = uuidv4();
       this.clients.set(ws, { sessionId, createdAt: new Date() });
 
+      // 为每个客户端创建独立的对话会话和 LLM 实例
+      const session = new ConversationSession(sessionId);
+      this.sessionMap.set(ws, session);
+
+      if (llmConfigured()) {
+        this.llmMap.set(ws, new DeepSeekLLM(llmConfig));
+      }
+
       console.log(`🔗 新连接: ${sessionId.slice(0, 8)} (当前在线: ${this.clients.size})`);
 
-      // 发送 connected 消息（携带 sessionId）
       this.send(ws, { type: 'connected', sessionId });
 
-      // 处理消息
       ws.on('message', (raw) => {
         try {
           const msg = JSON.parse(raw.toString()) as WSMessage;
@@ -51,7 +74,6 @@ export class WSServer {
         }
       });
 
-      // 断连清理（同时断开讯飞 ASR）
       ws.on('close', () => {
         const client = this.clients.get(ws);
         if (client) {
@@ -59,6 +81,8 @@ export class WSServer {
         }
         this.clients.delete(ws);
         this.cleanupASR(ws);
+        this.sessionMap.delete(ws);
+        this.llmMap.delete(ws);
       });
 
       ws.on('error', (err) => {
@@ -72,16 +96,16 @@ export class WSServer {
   }
 
   stop(): void {
-    // 断开所有 ASR 连接（先收集 key，避免迭代中修改 Map）
     for (const ws of [...this.asrMap.keys()]) {
       this.cleanupASR(ws);
     }
-    // 通知所有客户端后关闭
     for (const [ws] of this.clients) {
       ws.close(1000, 'Server shutting down');
     }
     this.wss?.close();
     this.clients.clear();
+    this.sessionMap.clear();
+    this.llmMap.clear();
   }
 
   // ---- 消息路由 ----
@@ -95,12 +119,12 @@ export class WSServer {
         this.handleAudioFrame(ws, msg);
         break;
 
-      case 'config_update':
-        // TODO: PR7 场景/纠错模式切换后处理
+      case 'interrupt':
+        this.handleInterrupt(ws);
         break;
 
-      case 'interrupt':
-        // TODO: PR9 实现打断逻辑
+      case 'config_update':
+        this.handleConfigUpdate(ws, msg);
         break;
 
       default:
@@ -108,14 +132,13 @@ export class WSServer {
     }
   }
 
-  // ---- 音频帧处理 ----
+  // ---- 音频帧 → ASR ----
   private handleAudioFrame(
     ws: WebSocket,
     msg: Extract<WSMessage, { type: 'audio_frame' }>,
   ): void {
     if (!asrConfigured()) return;
 
-    // 懒初始化：首次音频帧时创建该客户端的 ASR 连接
     let asr = this.asrMap.get(ws);
     if (!asr) {
       asr = new XunfeiASR(asrConfig, {
@@ -124,18 +147,77 @@ export class WSServer {
         },
         onFinal: (text: string) => {
           this.send(ws, { type: 'asr_final', text });
+          // ASR 确认一句话 → 触发 AI 对话
+          this.handleUserInput(ws, text);
         },
         onError: (err: Error) => {
-          console.error(`⚠️ ASR 错误 (session: ...): ${err.message}`);
+          console.error(`⚠️ ASR 错误: ${err.message}`);
         },
       });
       asr.connect();
       this.asrMap.set(ws, asr);
     }
 
-    // 将 number[] 转为 Int16 Buffer 发送给讯飞
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
     asr.sendAudio(buffer);
+  }
+
+  // ---- 用户输入 → LLM ----
+  private async handleUserInput(ws: WebSocket, text: string): Promise<void> {
+    const llm = this.llmMap.get(ws);
+    if (!llm) return;
+
+    const session = this.sessionMap.get(ws);
+    if (!session) return;
+
+    session.addUserMessage(text);
+
+    let llmBuffer = '';
+
+    await llm.chat(session.getMessages(), {
+      onStream: (chunk: string) => {
+        llmBuffer += chunk;
+        this.send(ws, { type: 'llm_stream', text: chunk });
+      },
+      onDone: (fullText: string) => {
+        if (fullText) {
+          session.addAssistantMessage(fullText);
+        }
+        this.send(ws, { type: 'llm_done' });
+      },
+      onError: (err: Error) => {
+        console.error(`⚠️ LLM 错误: ${err.message}`);
+        this.send(ws, { type: 'llm_done' });
+      },
+    });
+  }
+
+  // ---- 打断（仅影响当前客户端）----
+  private handleInterrupt(ws: WebSocket): void {
+    // 中断当前客户端的 LLM 流式输出
+    const llm = this.llmMap.get(ws);
+    llm?.abort();
+
+    // 重置当前客户端的 ASR
+    const asr = this.asrMap.get(ws);
+    if (asr) {
+      asr.end();
+    }
+  }
+
+  // ---- 配置更新 ----
+  private handleConfigUpdate(
+    ws: WebSocket,
+    msg: Extract<WSMessage, { type: 'config_update' }>,
+  ): void {
+    const session = this.sessionMap.get(ws);
+    if (session) {
+      session.setScene(msg.payload.scene);
+      console.log(
+        `⚙️  场景切换: ${msg.payload.scene}（已清空历史）, 纠错模式: ${msg.payload.correctionMode}`,
+      );
+    }
+    // TODO: PR7 纠正模式参数化
   }
 
   // ---- 清理 ----

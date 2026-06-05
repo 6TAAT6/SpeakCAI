@@ -38,8 +38,18 @@ wsServer.start();
 const shutdown = () => {
   console.log('\n🛑 正在关闭服务...');
   wsServer.stop();
-  httpServer.close();
-  process.exit(0);
+
+  // 等待 HTTP 连接关闭，超时 5 秒后强制退出
+  const forceExit = setTimeout(() => {
+    console.log('⚠️  强制退出（超时）');
+    process.exit(0);
+  }, 5000);
+
+  httpServer.close(() => {
+    clearTimeout(forceExit);
+    console.log('✅ 服务已安全关闭');
+    process.exit(0);
+  });
 };
 
 process.on('SIGINT', shutdown);

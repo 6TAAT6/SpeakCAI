@@ -10,16 +10,28 @@ interface UseWebSocketReturn {
   lastMessage: WSMessage | null;
 }
 
+const MAX_RETRIES = 10;
+const BASE_DELAY = 1000;
+const MAX_DELAY = 30000;
+
 export function useWebSocket(url: string): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const retryCountRef = useRef(0);
   const errorOccurredRef = useRef(false);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    // 防止重入：已连接或正在连接中时跳过
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
+
     setStatus('connecting');
     errorOccurredRef.current = false;
 
@@ -35,6 +47,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
           setStatus('connected');
           setSessionId(msg.sessionId);
           errorOccurredRef.current = false;
+          retryCountRef.current = 0; // 连接成功，重置重试计数
         }
         setLastMessage(msg);
       } catch {
@@ -46,7 +59,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
       if (!errorOccurredRef.current) {
         setStatus('disconnected');
       }
-      reconnectTimerRef.current = setTimeout(() => connect(), 3000);
+
+      // 指数退避重连，上限 MAX_RETRIES 次
+      if (retryCountRef.current < MAX_RETRIES) {
+        const delay = Math.min(BASE_DELAY * 2 ** retryCountRef.current, MAX_DELAY);
+        retryCountRef.current++;
+        reconnectTimerRef.current = setTimeout(() => connect(), delay);
+      }
     };
 
     ws.onerror = () => {
@@ -71,4 +90,10 @@ export function useWebSocket(url: string): UseWebSocketReturn {
   }, [connect]);
 
   return { status, sessionId, messages: { send }, lastMessage };
+}
+
+/** 根据当前页面地址动态拼接 WebSocket URL */
+export function getWsUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.hostname}:3001`;
 }

@@ -44,11 +44,23 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][]): boolean {
-    const channelData = inputs[0]?.[0];
-    if (!channelData) return true;
+    const input = inputs[0];
+    if (!input || input.length === 0) return true;
+
+    // 取第一声道（mono），如需多声道可扩展为混音
+    const channelData = input[0];
+    if (!channelData || channelData.length === 0) return true;
 
     for (let i = 0; i < channelData.length; i++) {
-      this.accumulated[this.offset++] = channelData[i];
+      // 多声道时混音到单声道（取平均）
+      let sample = channelData[i];
+      if (input.length > 1) {
+        for (let ch = 1; ch < input.length; ch++) {
+          sample += input[ch][i];
+        }
+        sample /= input.length;
+      }
+      this.accumulated[this.offset++] = sample;
 
       if (this.offset >= this.frameSize) {
         // 复制一份发送（避免后续写入覆盖）
