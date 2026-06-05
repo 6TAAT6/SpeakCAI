@@ -6,6 +6,8 @@ import type { ASRConfig } from './asr.ts';
 import { ConversationSession } from './session.ts';
 import { DeepSeekLLM } from './llm.ts';
 import type { LLMConfig } from './llm.ts';
+import { XunfeiTTS } from './tts.ts';
+import type { TTSConfig } from './tts.ts';
 
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
@@ -17,6 +19,14 @@ const getASRConfig = (): ASRConfig => ({
 const getLLMConfig = (): LLMConfig => ({
   apiKey: process.env.DEEPSEEK_API_KEY || '',
   model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+});
+
+const getTTSConfig = (): TTSConfig => ({
+  appId: process.env.XUNFEI_APP_ID || '',
+  apiKey: process.env.XUNFEI_API_KEY || '',
+  apiSecret: process.env.XUNFEI_API_SECRET || '',
+  voiceName: 'catherine', // 英文女声-Catherine
+  speed: 50,
 });
 
 function asrConfigured(): boolean {
@@ -41,6 +51,7 @@ export class WSServer {
   private sessionMap: Map<WebSocket, ConversationSession> = new Map();
   // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
   private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
+  private ttsMap: Map<WebSocket, XunfeiTTS> = new Map();
 
   constructor(private port: number) {}
 
@@ -91,6 +102,8 @@ export class WSServer {
         this.cleanupASR(ws);
         this.sessionMap.delete(ws);
         this.llmMap.delete(ws);
+        this.ttsMap.get(ws)?.abort();
+        this.ttsMap.delete(ws);
       });
 
       ws.on('error', (err) => {
@@ -114,6 +127,7 @@ export class WSServer {
     this.clients.clear();
     this.sessionMap.clear();
     this.llmMap.clear();
+    this.ttsMap.clear();
   }
 
   // ---- 消息路由 ----
@@ -129,6 +143,10 @@ export class WSServer {
 
       case 'interrupt':
         this.handleInterrupt(ws);
+        break;
+
+      case 'resume':
+        this.handleResume(ws);
         break;
 
       case 'config_update':
@@ -221,10 +239,42 @@ export class WSServer {
           session.addAssistantMessage(fullText);
         }
         this.send(ws, { type: 'llm_done' });
+        // LLM 回复完成 → 自动触发 TTS 语音合成
+        this.handleTTS(ws, fullText);
       },
       onError: (err: Error) => {
         console.error(`⚠️ LLM 错误: ${err.message}`);
         this.send(ws, { type: 'llm_done' });
+      },
+    });
+  }
+
+  // ---- LLM 文本 → TTS 语音 ----
+  private handleTTS(ws: WebSocket, text: string): void {
+    const cfg = getTTSConfig();
+    if (!cfg.appId || cfg.appId === 'your_app_id') return;
+    if (!text) return;
+
+    // 中止上一次 TTS，避免重叠语音
+    this.ttsMap.get(ws)?.abort();
+
+    const tts = new XunfeiTTS(cfg);
+    this.ttsMap.set(ws, tts);
+
+    let chunkIndex = 0;
+    tts.synthesize(text, {
+      onAudio: (chunk: Buffer) => {
+        this.send(ws, {
+          type: 'tts_audio',
+          data: chunk.toString('base64'),
+          chunkIndex: chunkIndex++,
+        });
+      },
+      onDone: () => {
+        this.send(ws, { type: 'tts_done' });
+      },
+      onError: (err: Error) => {
+        console.error(`⚠️ TTS 错误: ${err.message}`);
       },
     });
   }
@@ -235,11 +285,40 @@ export class WSServer {
     const llm = this.llmMap.get(ws);
     llm?.abort();
 
+    // 中断当前 TTS 合成
+    this.ttsMap.get(ws)?.abort();
+
     // 重置当前客户端的 ASR
     const asr = this.asrMap.get(ws);
     if (asr) {
       asr.end();
     }
+  }
+
+  // ---- 继续对话（打断后，用已有上下文重跑 LLM）----
+  private async handleResume(ws: WebSocket): Promise<void> {
+    const llm = this.llmMap.get(ws);
+    if (!llm) return;
+    const session = this.sessionMap.get(ws);
+    if (!session) return;
+
+    const messages = session.getMessages();
+    let fullText = '';
+    await llm.chat(messages, {
+      onStream: (chunk: string) => {
+        fullText += chunk;
+        this.send(ws, { type: 'llm_stream', text: chunk });
+      },
+      onDone: () => {
+        if (fullText) session.addAssistantMessage(fullText);
+        this.send(ws, { type: 'llm_done' });
+        this.handleTTS(ws, fullText);
+      },
+      onError: (err: Error) => {
+        console.error(`⚠️ LLM 错误: ${err.message}`);
+        this.send(ws, { type: 'llm_done' });
+      },
+    });
   }
 
   // ---- 配置更新 ----
