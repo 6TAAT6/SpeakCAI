@@ -1,8 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useCallback } from 'react';
 import { useWebSocket } from './hooks/useWebSocket.ts';
+import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
 export function App() {
   const { status, sessionId, messages } = useWebSocket('ws://localhost:3001');
+  const [frameCount, setFrameCount] = useState(0);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const statusIndicator = useMemo(() => {
     switch (status) {
@@ -21,6 +25,29 @@ export function App() {
     messages.send({ type: 'ping' });
   };
 
+  // ---- 音频采集：AudioWorklet → WebSocket ----
+  const { start, stop, isRecording, error: captureError } = useAudioCapture({
+    onAudioFrame: (frame) => {
+      messagesRef.current.send({
+        type: 'audio_frame',
+        data: Array.from(frame.data),
+        seq: frame.seq,
+      });
+      setFrameCount((c) => c + 1);
+    },
+  });
+
+  const handleRecordToggle = useCallback(async () => {
+    if (isRecording) {
+      stop();
+      setFrameCount(0);
+    } else {
+      await start();
+    }
+  }, [isRecording, start, stop]);
+
+  const wsReady = status === 'connected';
+
   return (
     <div className="app">
       <header className="app-header">
@@ -31,18 +58,37 @@ export function App() {
             {statusIndicator.text}
             {sessionId && <small> · Session: {sessionId.slice(0, 8)}</small>}
           </span>
-          <button onClick={handlePing} disabled={status !== 'connected'}>
+          <button onClick={handlePing} disabled={!wsReady}>
             Ping
+          </button>
+          <button
+            onClick={handleRecordToggle}
+            disabled={!wsReady}
+            className={isRecording ? 'recording-btn' : ''}
+          >
+            {isRecording ? '⏹ 停止' : '🎤 录音'}
           </button>
         </div>
       </header>
 
       <main className="app-main">
-        <p className="placeholder">
-          {status === 'connected'
-            ? '系统就绪，等待后续模块接入...'
-            : '正在建立连接，请确保服务端已启动...'}
-        </p>
+        {isRecording ? (
+          <div className="recording-indicator">
+            <span className="recording-dot" />
+            <span>
+              录音中 · 已发送 {frameCount} 帧
+              <small>（{frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s）</small>
+            </span>
+          </div>
+        ) : captureError ? (
+          <p className="error-message">{captureError}</p>
+        ) : (
+          <p className="placeholder">
+            {wsReady
+              ? '系统就绪，点击"录音"开始采集音频'
+              : '正在建立连接，请确保服务端已启动...'}
+          </p>
+        )}
       </main>
     </div>
   );
