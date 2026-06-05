@@ -57,10 +57,14 @@ export class ConversationSession {
   }
 
   private buildSystemPrompt(scene: Scene, mode: CorrectionMode): ChatMessage {
+    const hour = new Date().getHours();
+    const partOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
     return {
       role: 'system',
       content: [
         SCENE_PROMPTS[scene],
+        '',
+        `It is currently ${partOfDay}. Use greetings appropriate for this time of day.`,
         '',
         BILINGUAL_INSTRUCTION,
         '',
