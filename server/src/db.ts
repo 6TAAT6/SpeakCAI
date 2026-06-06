@@ -113,6 +113,7 @@ export function updateSessionConfig(sessionId: string, scene: string, mode: stri
 export function endSession(sessionId: string): void {
   const d = getDB();
   d.prepare('UPDATE sessions SET ended_at = datetime(\'now\') WHERE session_id = ?').run(sessionId);
+  d.pragma('wal_checkpoint(PASSIVE)');
 }
 
 export function deleteSession(sessionId: string): void {

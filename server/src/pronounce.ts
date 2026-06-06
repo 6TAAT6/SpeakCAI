@@ -18,6 +18,14 @@ export interface ISEResult {
   weakPhones: string[];
 }
 
+interface PhoneScore {
+  phone?: string;
+  phn?: string;
+  phoneme?: string;
+  score?: number;
+  deducted_score?: number;
+}
+
 export interface ISEHandler {
   onResult: (result: ISEResult) => void;
   onError: (error: Error) => void;
@@ -146,12 +154,13 @@ export class XunfeiISE {
         } else {
           // JSON 格式
           const inner = JSON.parse(decoded);
+          const phoneScores: PhoneScore[] = Array.isArray(inner.phone_score) ? inner.phone_score : [];
           handler.onResult({
             totalScore: Math.round(inner.total_score ?? 0),
             accuracyScore: Math.round(inner.accuracy_score ?? 0),
             fluencyScore: Math.round(inner.fluency_score ?? 0),
             integrityScore: Math.round(inner.integrity_score ?? 0),
-            weakPhones: extractWeakPhones(inner.phone_score),
+            weakPhones: extractWeakPhones(phoneScores),
           });
         }
       } catch (e) {
@@ -175,13 +184,13 @@ export class XunfeiISE {
   }
 }
 
-function extractWeakPhones(phoneScore: unknown): string[] {
-  if (!Array.isArray(phoneScore)) return [];
+function extractWeakPhones(phoneScores: PhoneScore[]): string[] {
   const phones: string[] = [];
-  for (const p of phoneScore) {
-    if (p?.deducted_score > 0 || p?.score < 70) {
-      phones.push(p.phone || p.phn || '');
+  for (const p of phoneScores) {
+    const name = p.phone || p.phn || p.phoneme || '';
+    if (name && ((p.deducted_score ?? 0) > 0 || (p.score ?? 100) < 70)) {
+      phones.push(name);
     }
   }
-  return phones.filter(Boolean);
+  return phones;
 }
