@@ -53,8 +53,8 @@ export class DeepSeekLLM {
           model: this.config.model,
           messages,
           stream: true,
-          temperature: 0.3,
-          max_tokens: 1024,
+          temperature: 0.6,
+          max_tokens: 2048,
         }),
         signal: AbortSignal.any([this.abortController.signal, AbortSignal.timeout(30_000)]),
       });
@@ -126,7 +126,7 @@ export class DeepSeekLLM {
           messages: [{ role: 'user', content: prompt }],
           stream: false,
           temperature: 0.3,
-          max_tokens: 256,
+          max_tokens: 512,
         }),
         signal: AbortSignal.timeout(15_000),
       });
