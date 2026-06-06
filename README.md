@@ -4,11 +4,14 @@ AI 英语口语陪练工具，支持场景选择、实时语音对话、发音�
 
 ## 核心功能
 
-- **场景选择** — 面试 / 点餐 / 会议，一键切换对话上下文
+- **场景选择** — 面试 / 点餐 / 会议，一键切换
 - **实时语音对话** — 流式 ASR + LLM + TTS，说完 < 2 秒听到回复
-- **实时字幕** — 录音时前端实时显示识别文字（partial + final）
+- **实时字幕** — 前端实时显示识别文字（partial + final）
 - **发音评测** — 讯飞 ISE 流式语音评测，音素级反馈
+- **即时纠错** — 回复中的语法/表达错误自动提取为纠错卡片，严师模式追问重说
 - **三种纠错模式** — 沉浸（课后纠正）/ 教练（轻量提醒）/ 严师（追问重说）
+- **对话历史** — 查看、重放、删除过往对话记录
+- **深色模式** — 自动 / 深色 / 浅色一键切换
 - **中文翻译** — LLM 双语输出，每轮中文对照
 - **打断/继续** — 随时打断 AI 回复，重新提问
 
@@ -22,6 +25,7 @@ AI 英语口语陪练工具，支持场景选择、实时语音对话、发音�
 | 语音合成 | 讯飞 语音合成 v2 |
 | 发音评测 | 讯飞 ISE 流式语音评测 |
 | 对话模型 | DeepSeek V4 Pro（1M 上下文，流式 SSE） |
+| 数据库 | SQLite（better-sqlite3） |
 
 ## 流式管道
 
@@ -39,9 +43,11 @@ AudioWorklet 256ms/帧 ─→ 讯飞 ASR 流式识别 ─→ 前端实时字幕
 
 ## 纠错三层体系
 
-- **即时层**：对话中回复末尾提 1-2 个关键错误
+- **即时层**：对话中自动提取纠错卡片（💡 Tips + 🔁 Try again）
 - **课后层**：DeepSeek 1M 上下文全量分析（规划中）
 - **量化层**：评分曲线 + 雷达图 + 薄弱音素追踪（规划中）
+
+三种模式：沉浸（课后纠正）/ 教练（轻量提醒，默认）/ 严师（追问重说）
 
 ## 目录结构
 
@@ -52,18 +58,19 @@ SpeakCAI/
 ├── client/                   # React 前端（端口 5173）
 │   └── src/
 │       ├── App.tsx            # 主界面 + 对话逻辑
-│       ├── App.css            # 样式（含暗色模式）
+│       ├── App.css            # 样式（含深色模式）
 │       ├── hooks/             # useWebSocket / useAudioCapture
 │       └── workers/           # AudioWorklet processor
 ├── server/                   # Node.js 后端（端口 3000/3001）
 │   └── src/
-│       ├── index.ts           # 入口 + HTTP + 优雅退出
+│       ├── index.ts           # 入口 + HTTP API + 优雅退出
 │       ├── ws-server.ts       # WebSocket 消息路由
 │       ├── asr.ts             # 讯飞 ASR
 │       ├── tts.ts             # 讯飞 TTS
 │       ├── pronounce.ts       # 讯飞 ISE 发音评测
 │       ├── llm.ts             # DeepSeek 流式对话
-│       └── session.ts         # 会话管理 + 系统提示词
+│       ├── session.ts         # 会话管理 + 系统提示词
+│       └── db.ts              # SQLite 对话持久化
 └── .env.example               # API Key 模板
 ```
 
@@ -94,6 +101,7 @@ cd client && npm run dev
 | DeepSeek | 对话生成与语法纠错 |
 | React + Vite | 前端框架与构建 |
 | Express + ws | HTTP + WebSocket |
+| SQLite (better-sqlite3) | 对话数据持久化 |
 | TypeScript | 类型安全 |
 | ESLint + Prettier | 代码规范 |
 
@@ -107,8 +115,10 @@ cd client && npm run dev
 - [x] 讯飞 TTS 语音合成
 - [x] 场景选择 + 三种纠错模式
 - [x] 讯飞 ISE 发音评测
-- [ ] 即时纠错气泡
+- [x] 即时纠错气泡
+- [x] 深色模式
+- [x] 对话历史页
+- [x] SQLite 对话持久化
 - [ ] 课后总结报告
-- [ ] 对话历史记录
 - [ ] 量化进度追踪
 - [ ] README + Demo 视频
