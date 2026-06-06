@@ -1,6 +1,6 @@
 # 英语口语教练 — SpeakCAI
 
-AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错。72 小时参赛作品。
+AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错和课后报告。72 小时参赛作品。
 
 ## 核心功能
 
@@ -10,10 +10,11 @@ AI 英语口语陪练工具，支持场景选择、实时语音对话、发音�
 - **发音评测** — 讯飞 ISE 流式语音评测，音素级反馈
 - **即时纠错** — 回复中的语法/表达错误自动提取为纠错卡片，严师模式追问重说
 - **三种纠错模式** — 沉浸（课后纠正）/ 教练（轻量提醒）/ 严师（追问重说）
-- **对话历史** — 查看、重放、删除过往对话记录
+- **课后报告** — 发音曲线 + 雷达图 + 薄弱音素 + LLM 定性分析，自动存库
+- **对话历史** — 查看、回放、删除过往对话记录
+- **AI 打断/继续** — 随时打断 AI 回复和播报，支持从暂停位置续播
 - **深色模式** — 自动 / 深色 / 浅色一键切换
 - **中文翻译** — LLM 双语输出，每轮中文对照
-- **打断/继续** — 随时打断 AI 回复，重新提问
 
 ## 技术栈
 
@@ -44,8 +45,8 @@ AudioWorklet 256ms/帧 ─→ 讯飞 ASR 流式识别 ─→ 前端实时字幕
 ## 纠错三层体系
 
 - **即时层**：对话中自动提取纠错卡片（💡 Tips + 🔁 Try again）
-- **课后层**：DeepSeek 1M 上下文全量分析（规划中）
-- **量化层**：评分曲线 + 雷达图 + 薄弱音素追踪（规划中）
+- **课后层**：DeepSeek 全量分析对话记录，输出语法错误、表达升级、改进建议
+- **量化层**：发音分数趋势柱状图 + 能力雷达图 + 薄弱音素追踪
 
 三种模式：沉浸（课后纠正）/ 教练（轻量提醒，默认）/ 严师（追问重说）
 
@@ -54,24 +55,40 @@ AudioWorklet 256ms/帧 ─→ 讯飞 ASR 流式识别 ─→ 前端实时字幕
 ```
 SpeakCAI/
 ├── shared/
-│   └── types.ts              # 前后端共享类型定义
-├── client/                   # React 前端（端口 5173）
+│   └── types.ts                  # 前后端共享类型定义
+├── client/                       # React 前端（端口 5173）
 │   └── src/
-│       ├── App.tsx            # 主界面 + 对话逻辑
-│       ├── App.css            # 样式（含深色模式）
-│       ├── hooks/             # useWebSocket / useAudioCapture
-│       └── workers/           # AudioWorklet processor
-├── server/                   # Node.js 后端（端口 3000/3001）
+│       ├── main.tsx              # 入口
+│       ├── App.tsx               # 主界面 + 对话逻辑 + TTS 播放
+│       ├── App.css               # 样式（含深色模式）
+│       ├── types.ts              # 前端共享类型
+│       ├── components/
+│       │   ├── TopBar.tsx        # 顶栏：品牌 + 场景/模式 + 状态
+│       │   ├── BottomBar.tsx     # 底栏：录音/打断/报告按钮
+│       │   ├── ChatView.tsx      # 对话气泡渲染
+│       │   ├── HistoryView.tsx   # 历史列表 + 详情
+│       │   ├── ReportView.tsx    # 报告面板 + 图表
+│       │   └── ReportAnalysis.tsx # LLM 定性分析渲染
+│       ├── hooks/
+│       │   ├── useWebSocket.ts   # WebSocket 连接 + 自动重连
+│       │   └── useAudioCapture.ts # 麦克风采集
+│       └── workers/
+│           └── audio-processor.ts # AudioWorklet 降采样
+├── server/                       # Node.js 后端（HTTP 3000 / WS 3001）
 │   └── src/
-│       ├── index.ts           # 入口 + HTTP API + 优雅退出
-│       ├── ws-server.ts       # WebSocket 消息路由
-│       ├── asr.ts             # 讯飞 ASR
-│       ├── tts.ts             # 讯飞 TTS
-│       ├── pronounce.ts       # 讯飞 ISE 发音评测
-│       ├── llm.ts             # DeepSeek 流式对话
-│       ├── session.ts         # 会话管理 + 系统提示词
-│       └── db.ts              # SQLite 对话持久化
-└── .env.example               # API Key 模板
+│       ├── index.ts              # 入口 + REST API + 报告生成
+│       ├── ws-server.ts          # WebSocket 消息路由
+│       ├── asr.ts                # 讯飞 ASR 客户端
+│       ├── tts.ts                # 讯飞 TTS 客户端
+│       ├── pronounce.ts          # 讯飞 ISE 发音评测
+│       ├── llm.ts                # DeepSeek 流式对话
+│       ├── session.ts            # 会话管理 + 系统提示词
+│       └── db.ts                 # SQLite CRUD
+├── .env.example                  # API Key 模板
+├── .editorconfig                 # 编辑器规范
+├── .prettierrc                   # 代码格式化
+├── eslint.config.js              # 代码规范
+└── start.bat                     # 启动脚本
 ```
 
 ## 快速开始
@@ -103,7 +120,7 @@ cd client && npm run dev
 | Express + ws | HTTP + WebSocket |
 | SQLite (better-sqlite3) | 对话数据持久化 |
 | TypeScript | 类型安全 |
-| ESLint + Prettier | 代码规范 |
+| ESLint + Prettier + EditorConfig | 代码规范 |
 
 ## 开发规划
 
@@ -119,6 +136,7 @@ cd client && npm run dev
 - [x] 深色模式
 - [x] 对话历史页
 - [x] SQLite 对话持久化
-- [ ] 课后总结报告
-- [ ] 量化进度追踪
+- [x] 课后总结报告
+- [x] 组件化拆分（TopBar / BottomBar / ChatView / HistoryView / ReportView / ReportAnalysis）
+- [ ] 量化进度追踪（多场对比、成长曲线）
 - [ ] README + Demo 视频
