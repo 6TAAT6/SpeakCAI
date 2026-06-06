@@ -59,6 +59,9 @@ export type WSMessage =
       tryAgain?: string;
     }
 
+  // TTS 播放完成通知（前端 → 后端，解除回声屏蔽）
+  | { type: 'tts_playback_done' }
+
   // 打断信号（双向）
   | { type: 'interrupt' }
 

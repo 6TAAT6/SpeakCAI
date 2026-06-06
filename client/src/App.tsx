@@ -302,7 +302,6 @@ export function App() {
     playbackStartRef.current = ctx.currentTime;
     source.onended = () => {
       if (pausedByUserRef.current) {
-        // 用户主动暂停（打断），保留 buffer + offset 用于后续续播
         pausedByUserRef.current = false;
         return;
       }
@@ -310,6 +309,7 @@ export function App() {
       playbackOffsetRef.current = 0;
       ttsBufferRef.current = null;
       setTtsPlaying(false);
+      messagesRef.current.send({ type: 'tts_playback_done' });
     };
     source.start(0, offsetSeconds);
   // eslint-disable-next-line react-hooks/exhaustive-deps

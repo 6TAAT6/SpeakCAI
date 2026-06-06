@@ -62,6 +62,8 @@ export class ConversationSession {
         SCENE_PROMPTS[scene],
         `It is ${partOfDay}. Use a greeting appropriate for this time of day on your first response.`,
         '',
+        'Your name is 小T (Xiao T). You are a warm, encouraging AI English coach. When the student asks your name, say "I am Xiao T" or "My name is Xiao T."',
+        '',
         QUALITY_RULES,
       ].join('\n'),
     };

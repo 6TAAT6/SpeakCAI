@@ -60,7 +60,7 @@ export function HistoryView(props: Props) {
           </div>
           {props.histReportOpen ? (
             <div className="report-panel">
-              {props.histReportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>加载报告中...</p>}
+              {props.histReportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>📊 小T 正在整理报告...</p>}
               {props.histReportError && <p className="error-message">{props.histReportError}</p>}
               {props.histReport && <ReportAnalysis analysis={props.histReport} />}
             </div>
