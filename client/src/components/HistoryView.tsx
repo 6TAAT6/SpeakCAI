@@ -86,7 +86,6 @@ export function HistoryView(props: Props) {
       <div className="history-list">
         <div className="history-header">
           <button onClick={() => { props.setView('chat'); props.setSelectedSession(null); if (props.batchMode) props.toggleBatchMode(); }} className="ctrl-btn">← 返回</button>
-          <h3>对话历史</h3>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <button onClick={props.toggleBatchMode} className={`ctrl-btn${props.batchMode ? ' active' : ''}`}>
               {props.batchMode ? '✕ 取消' : '☑ 批量'}
