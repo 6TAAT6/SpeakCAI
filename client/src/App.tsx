@@ -207,20 +207,48 @@ export function App() {
     setHistReportLoading(true);
     setHistReportError('');
     try {
+      // 先尝试读取已有报告
       const r = await fetch(`/api/sessions/${selectedSession}/report`);
-      if (!r.ok) {
-        if (r.status === 404) { setHistReportError('该会话尚未生成报告，请在对话中点击 📊 按钮生成'); return; }
+      if (r.ok) {
+        setHistReport(await r.json());
+        return;
+      }
+      if (r.status !== 404) {
         const e = await r.json().catch(() => ({ error: '读取失败' }));
         setHistReportError(e.error || '读取失败');
         return;
       }
-      setHistReport(await r.json());
+      // 404: 尚无报告，从历史数据即时生成
+      const sess = sessions.find(s => s.session_id === selectedSession);
+      if (!sess || sessionTurns.length === 0) {
+        setHistReportError('暂无对话数据，无法生成报告');
+        return;
+      }
+      const genR = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: selectedSession,
+          turns: sessionTurns.map(t => ({ role: t.role === 'assistant' ? 'ai' : 'user', text: t.text })),
+          scene: sess.scene,
+          mode: sess.mode,
+        }),
+      });
+      if (!genR.ok) {
+        const e = await genR.json().catch(() => ({ error: '报告生成失败' }));
+        setHistReportError(e.error || '报告生成失败');
+        return;
+      }
+      const analysis = await genR.json();
+      setHistReport(analysis);
+      // 刷新 has_report 标记，下次直接查看
+      setSessions(prev => prev.map(s => s.session_id === selectedSession ? { ...s, has_report: 1 } : s));
     } catch {
       setHistReportError('网络错误');
     } finally {
       setHistReportLoading(false);
     }
-  }, [histReportOpen, histReport, selectedSession]);
+  }, [histReportOpen, histReport, selectedSession, sessions, sessionTurns]);
 
   const resetConvoTimer = useCallback(() => setConvoStartTime(Date.now()), []);
 

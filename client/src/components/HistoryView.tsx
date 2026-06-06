@@ -41,6 +41,7 @@ interface Props {
 
 export function HistoryView(props: Props) {
   const goBack = () => { props.setSelectedSession(null); props.setSessionTurns([]); props.setHistReportOpen(false); props.setHistReport(null); };
+  const selectedHasReport = props.sessions.find(s => s.session_id === props.selectedSession)?.has_report;
 
   if (props.historyLoading) {
     return <div className="history-panel"><p className="placeholder" style={{ marginTop: '20%' }}>加载中...</p></div>;
@@ -53,7 +54,7 @@ export function HistoryView(props: Props) {
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             <button onClick={goBack} className="ctrl-btn">← 返回</button>
             <button onClick={props.toggleHistReport} className="ctrl-btn" disabled={props.histReportLoading}>
-              {props.histReportOpen ? '💬 对话' : '📊 学习报告'}
+              {props.histReportOpen ? '💬 对话' : selectedHasReport ? '📊 学习报告' : '🧠 生成报告'}
             </button>
             <button onClick={props.deleteSelectedSession} className="ctrl-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)', marginLeft: 'auto' }}>🗑 删除</button>
           </div>
