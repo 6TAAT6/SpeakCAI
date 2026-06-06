@@ -5,9 +5,42 @@ import { TIPS_STRIP_RE } from '@shared/types.ts';
 
 interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; tips?: string; tryAgain?: string }
 
+type Theme = 'auto' | 'dark' | 'light';
+
+function loadTheme(): Theme {
+  const stored = localStorage.getItem('theme');
+  if (stored === 'dark' || stored === 'light' || stored === 'auto') return stored;
+  return 'auto';
+}
+
+function applyTheme(theme: Theme): Theme {
+  const effective = theme === 'auto'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme;
+  document.documentElement.setAttribute('data-theme', effective);
+  return theme;
+}
+
 export function App() {
   const { status, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
+
+  // ---- 深色模式 ----
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  const cycleTheme = () => {
+    const next: Record<Theme, Theme> = { auto: 'dark', dark: 'light', light: 'auto' };
+    const t = next[theme];
+    localStorage.setItem('theme', t);
+    setTheme(applyTheme(t));
+  };
+  useEffect(() => {
+    applyTheme(theme);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => { if (theme === 'auto') setTheme(applyTheme('auto')); };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -215,6 +248,9 @@ export function App() {
       <header className="top-bar">
         <span className="brand">SpeakCAI</span>
         <div className="config-selectors">
+          <button onClick={cycleTheme} className="theme-btn" title={`主题: ${theme}`}>
+            {theme === 'auto' ? '🌓' : theme === 'dark' ? '🌙' : '☀️'}
+          </button>
           <select value={scene} onChange={(e) => updateConfig(e.target.value as typeof scene, correctionMode)} className="mini-select">
             <option value="interview">💼 面试</option>
             <option value="ordering">🍽️ 点餐</option>

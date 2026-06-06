@@ -121,9 +121,7 @@ export class XunfeiASR {
     this.ws.on('message', (raw: Buffer) => {
       try {
         const msg: ASRMessage = JSON.parse(raw.toString());
-        if (msg.msg_type === 'result') {
-          console.log('📩 识别:', JSON.stringify(msg).slice(0, 200));
-        }
+        // 调试用: if (msg.msg_type === 'result') console.log('📩 识别:', JSON.stringify(msg).slice(0, 200));
 
         // 握手/心跳/错误 字段嵌套在 data 内（大模型版 API）
         const inner = msg.data as Record<string, unknown> | undefined;
