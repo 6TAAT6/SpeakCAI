@@ -3,6 +3,14 @@ import { ReportAnalysis } from './ReportAnalysis.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
 import type { Session, TurnRow } from '../types.ts';
 
+/** SQLite datetime('now') 返回 UTC 格式 "YYYY-MM-DD HH:MM:SS"，转为用户本地时间显示 */
+function formatLocalTime(utcStr: string): string {
+  const iso = utcStr.replace(' ', 'T') + 'Z';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return utcStr;
+  return d.toLocaleString();
+}
+
 interface Props {
   sessions: Session[];
   selectedSession: string | null;
@@ -60,7 +68,7 @@ export function HistoryView(props: Props) {
               <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
                 <div className="bubble-header">
                   <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
-                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{t.created_at}</span>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatLocalTime(t.created_at)}</span>
                 </div>
                 <p>{t.text}</p>
               </div>
@@ -116,7 +124,7 @@ export function HistoryView(props: Props) {
                 <span className="history-scene">{props.sceneEmoji[s.scene] || '❓'} {s.scene}</span>
                 <span className="history-mode">{props.modeEmoji[s.mode] || '❓'} {s.mode}</span>
                 {s.has_report ? <span style={{ fontSize: '0.7rem' }} title="已有学习报告">📊</span> : null}
-                <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.created_at.slice(0, 16).replace('T', ' ')}</span>
+                <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{formatLocalTime(s.created_at)}</span>
                 {!props.batchMode && (
                   <button onClick={(e) => props.deleteSessionFromList(e, s.session_id)} className="theme-btn" style={{ fontSize: '0.75rem', width: 24, height: 24 }} title="删除">🗑</button>
                 )}
