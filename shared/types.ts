@@ -99,6 +99,42 @@ export interface LessonReport {
   improvementTips: string[];
 }
 
+// ---- 报告生成 ----
+
+/** 前端发送给后端报告 API 的请求体 */
+export interface ReportRequest {
+  turns: Array<{
+    role: 'user' | 'ai';
+    text: string;
+    score?: number;
+    accuracy?: number;
+    fluency?: number;
+    integrity?: number;
+    weakPhones?: string[];
+    tips?: string;
+    tryAgain?: string;
+  }>;
+  scene: string;
+  mode: string;
+}
+
+/** DeepSeek 生成的定性分析 */
+export interface LLMAnalysis {
+  overallLevel: string;
+  grammarErrors: Array<{
+    original: string;
+    corrected: string;
+    errorType: string;
+    explanationShort: string;
+  }>;
+  expressionUpgrades: Array<{
+    original: string;
+    suggestion: string;
+    reason: string;
+  }>;
+  improvementTips: string[];
+}
+
 // ---- 共享工具 ----
 
 /** 匹配 LLM 回复末尾的 💡 Tips: ... 段落（前后端共用，避免 DRY） */

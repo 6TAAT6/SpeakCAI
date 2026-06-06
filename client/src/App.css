@@ -406,6 +406,325 @@ body {
   gap: 8px;
 }
 
+/* ---- 学习报告面板 ---- */
+
+.report-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.report-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.report-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 量化摘要 */
+
+.report-quant-section {
+  margin-bottom: 4px;
+}
+
+.report-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.report-stat-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.report-stat-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.report-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-stat-value.accent {
+  color: var(--accent);
+}
+
+.report-stat-value.small {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* 报告区块 */
+
+.report-section {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-section:last-child {
+  border-bottom: none;
+}
+
+.report-section h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.report-empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 4px 0;
+}
+
+/* 柱状图 */
+
+.report-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 100px;
+  padding: 4px 0;
+}
+
+.report-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.report-bar-fill {
+  width: 100%;
+  max-width: 32px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+  min-height: 3px;
+  transition: height 0.4s ease-out;
+}
+
+.report-bar-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+/* 雷达图 */
+
+.report-radar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.radar-svg {
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+}
+
+.radar-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* 弱音素 */
+
+.report-phones-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-phone-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 500;
+}
+
+/* 综合评级 */
+
+.report-level-badge {
+  display: inline-block;
+  padding: 8px 20px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* 语法错误卡片 */
+
+.report-error-item {
+  padding: 8px 12px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  margin-bottom: 6px;
+}
+
+.report-error-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.report-error-original {
+  font-size: 0.85rem;
+  color: #dc2626;
+  text-decoration: line-through;
+}
+
+.report-error-arrow {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.report-error-corrected {
+  font-size: 0.85rem;
+  color: #059669;
+  font-weight: 600;
+}
+
+.report-error-type {
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: auto;
+}
+
+.report-error-explain {
+  font-size: 0.75rem;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+/* 表达升级卡片 */
+
+.report-upgrade-item {
+  padding: 8px 12px;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  background: #f0fdf4;
+  margin-bottom: 6px;
+}
+
+.report-upgrade-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.report-upgrade-original {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.report-upgrade-suggestion {
+  font-size: 0.85rem;
+  color: #059669;
+  font-weight: 600;
+}
+
+.report-upgrade-reason {
+  font-size: 0.75rem;
+  color: #065f46;
+  line-height: 1.4;
+}
+
+/* 改进建议 */
+
+.report-tips-list {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-tips-list li {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* 深色模式 — 报告 */
+
+[data-theme="dark"] .report-error-item {
+  background: #2d1f05;
+  border-color: #92400e;
+}
+
+[data-theme="dark"] .report-error-explain {
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .report-error-corrected {
+  color: #34d399;
+}
+
+[data-theme="dark"] .report-error-type {
+  background: #3b2504;
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .report-upgrade-item {
+  background: #052e16;
+  border-color: #065f46;
+}
+
+[data-theme="dark"] .report-upgrade-suggestion {
+  color: #34d399;
+}
+
+[data-theme="dark"] .report-upgrade-reason {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .report-phone-tag {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
 /* ---- 动画 ---- */
 
 @keyframes bubble-in {

@@ -2,8 +2,9 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 import { TIPS_STRIP_RE } from '@shared/types.ts';
+import type { LLMAnalysis } from '@shared/types.ts';
 
-interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; tips?: string; tryAgain?: string }
+interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
 
 type Theme = 'auto' | 'dark' | 'light';
 
@@ -112,6 +113,15 @@ export function App() {
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
 
+  // ---- 学习报告 ----
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [report, setReport] = useState<LLMAnalysis | null>(null);
+  const [reportError, setReportError] = useState('');
+  const [convoStartTime, setConvoStartTime] = useState(() => Date.now());
+
+  const resetConvoTimer = useCallback(() => setConvoStartTime(Date.now()), []);
+
   const stopAudio = useCallback(() => {
     try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
@@ -207,6 +217,8 @@ export function App() {
                 score: lastMessage.totalScore,
                 accuracy: lastMessage.accuracyScore,
                 fluency: lastMessage.fluencyScore,
+                integrity: lastMessage.integrityScore,
+                weakPhones: lastMessage.weakPhones,
               };
               return copy;
             }
@@ -282,6 +294,9 @@ export function App() {
       setFrameCount(0);
       setPartialText('');
     } else {
+      setReportOpen(false);
+      setReport(null);
+      resetConvoTimer();
       setTurns([]);
       setAiCurrent('');
       aiCurrentRef.current = '';
@@ -291,7 +306,32 @@ export function App() {
       audioChunksRef.current = [];
       await start();
     }
-  }, [isRecording, start, stop]);
+  }, [isRecording, start, stop, resetConvoTimer]);
+
+  const toggleReport = useCallback(async () => {
+    if (reportOpen) { setReportOpen(false); return; }
+    setReportOpen(true);
+    setReportLoading(true);
+    setReportError('');
+    setReport(null);
+    try {
+      const r = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turns, scene, mode: correctionMode }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: '报告生成失败' }));
+        setReportError(err.error || '报告生成失败');
+        return;
+      }
+      setReport(await r.json());
+    } catch {
+      setReportError('网络错误，请重试');
+    } finally {
+      setReportLoading(false);
+    }
+  }, [reportOpen, turns, scene, correctionMode]);
 
   const wsReady = status === 'connected';
   const hasConv = turns.length > 0 || partialText || aiCurrent || aiStreaming;
@@ -369,6 +409,186 @@ export function App() {
             )}
           </div>
         ) : (<>
+          {reportOpen ? (
+            /* ---- 学习报告面板 ---- */
+            <div className="report-panel">
+              <div className="report-header-bar">
+                <button onClick={() => setReportOpen(false)} className="ctrl-btn">← 返回对话</button>
+                <button onClick={toggleReport} className="ctrl-btn" disabled={reportLoading}>🔄 重新生成</button>
+              </div>
+
+              {reportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>🧠 AI 正在分析对话...</p>}
+              {reportError && <p className="error-message">{reportError}</p>}
+
+              {report && (
+                <div className="report-content">
+                  {/* 量化摘要 */}
+                  <div className="report-quant-section">
+                    <div className="report-stat-grid">
+                      <div className="report-stat-card">
+                        <div className="report-stat-label">练习轮次</div>
+                        <div className="report-stat-value">{turns.filter(t => t.role === 'user').length}</div>
+                      </div>
+                      <div className="report-stat-card">
+                        <div className="report-stat-label">平均发音</div>
+                        <div className="report-stat-value accent">
+                          {(() => {
+                            const scores = turns.filter(t => t.score !== undefined).map(t => t.score!);
+                            return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : '-';
+                          })()}分
+                        </div>
+                      </div>
+                      <div className="report-stat-card">
+                        <div className="report-stat-label">练习时长</div>
+                        <div className="report-stat-value">{Math.round((Date.now() - convoStartTime) / 60000)}分</div>
+                      </div>
+                      <div className="report-stat-card">
+                        <div className="report-stat-label">场景 / 模式</div>
+                        <div className="report-stat-value small">{scene === 'interview' ? '💼' : scene === 'ordering' ? '🍽️' : '📊'} {correctionMode === 'coach' ? '教练' : correctionMode === 'strict' ? '严师' : '沉浸'}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 发音分数曲线 */}
+                  <section className="report-section">
+                    <h4>📈 发音分数趋势</h4>
+                    {(() => {
+                      const userTurns = turns.filter(t => t.role === 'user' && t.score !== undefined);
+                      if (userTurns.length === 0) return <p className="report-empty">暂无发音数据</p>;
+                      return (
+                        <div className="report-bar-chart">
+                          {userTurns.map((t, i) => (
+                            <div key={i} className="report-bar-col" title={`第${i + 1}轮: ${t.score}分`}>
+                              <div className="report-bar-fill" style={{ height: `${Math.min((t.score || 0), 100)}%` }} />
+                              <span className="report-bar-label">#{i + 1}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </section>
+
+                  {/* 能力雷达图 */}
+                  <section className="report-section">
+                    <h4>🎯 能力雷达图</h4>
+                    {(() => {
+                      const userTurns = turns.filter(t => t.role === 'user' && t.score !== undefined);
+                      if (userTurns.length === 0) return <p className="report-empty">暂无发音数据</p>;
+                      const avg = (k: 'accuracy' | 'fluency' | 'integrity') => {
+                        const vals = userTurns.map(t => t[k] ?? 0).filter(v => v > 0);
+                        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                      };
+                      const a = Math.min(avg('accuracy') / 100, 1);
+                      const f = Math.min(avg('fluency') / 100, 1);
+                      const i = Math.min(avg('integrity') / 100, 1);
+                      const total = Math.min((userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length) / 100, 1);
+                      const r = 50, cx = 60, cy = 60;
+                      const px = (val: number, angle: number) => `${cx + Math.cos(angle) * r * val},${cy - Math.sin(angle) * r * val}`;
+                      const pts = [
+                        px(a, Math.PI / 2),         // 准确度  ↑
+                        px(f, -Math.PI / 6),        // 流利度  ↗
+                        px(i, -5 * Math.PI / 6),    // 完整度  ↙
+                        px(total, 7 * Math.PI / 6),  // 总分    ↖
+                      ].join(' ');
+                      return (
+                        <div className="report-radar">
+                          <svg viewBox="0 0 120 120" className="radar-svg">
+                            {/* 网格 */}
+                            {[0.25, 0.5, 0.75, 1].map(s => (
+                              <polygon key={s} points={
+                                [Math.PI / 2, -Math.PI / 6, -5 * Math.PI / 6, 7 * Math.PI / 6]
+                                  .map(a => `${cx + Math.cos(a) * r * s},${cy - Math.sin(a) * r * s}`).join(' ')
+                              } fill="none" stroke="var(--border)" strokeWidth="0.5" />
+                            ))}
+                            {/* 轴线 */}
+                            {[Math.PI / 2, -Math.PI / 6, -5 * Math.PI / 6, 7 * Math.PI / 6].map(a => (
+                              <line key={a} x1={cx} y1={cy} x2={cx + Math.cos(a) * r} y2={cy - Math.sin(a) * r} stroke="var(--border)" strokeWidth="0.5" />
+                            ))}
+                            {/* 数据 */}
+                            <polygon points={pts} fill="var(--accent)" fillOpacity="0.25" stroke="var(--accent)" strokeWidth="1.5" />
+                          </svg>
+                          <div className="radar-labels">
+                            <span style={{ color: 'var(--accent)' }}>准确度 {Math.round(avg('accuracy'))}</span>
+                            <span style={{ color: 'var(--success)' }}>流利度 {Math.round(avg('fluency'))}</span>
+                            <span style={{ color: 'var(--warning)' }}>完整度 {Math.round(avg('integrity'))}</span>
+                            <span>总分 {Math.round(userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </section>
+
+                  {/* 薄弱音素 */}
+                  <section className="report-section">
+                    <h4>🔊 薄弱音素</h4>
+                    {(() => {
+                      const counts = new Map<string, number>();
+                      turns.forEach(t => {
+                        (t.weakPhones || []).forEach(p => { if (p) counts.set(p, (counts.get(p) || 0) + 1); });
+                      });
+                      const list = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+                      if (list.length === 0) return <p className="report-empty">暂无弱音素数据</p>;
+                      return (
+                        <div className="report-phones-list">
+                          {list.map(([p, c]) => (
+                            <span key={p} className="report-phone-tag">/{p}/ ×{c}</span>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </section>
+
+                  {/* ---- LLM 定性分析 ---- */}
+                  <section className="report-section">
+                    <h4>🏆 综合评级</h4>
+                    <div className="report-level-badge">{report.overallLevel}</div>
+                  </section>
+
+                  {report.grammarErrors.length > 0 && (
+                    <section className="report-section">
+                      <h4>✏️ 语法/表达错误 ({report.grammarErrors.length})</h4>
+                      {report.grammarErrors.map((err, i) => (
+                        <div key={i} className="report-error-item">
+                          <div className="report-error-top">
+                            <span className="report-error-original">{err.original}</span>
+                            <span className="report-error-arrow">→</span>
+                            <span className="report-error-corrected">{err.corrected}</span>
+                            <span className="report-error-type">{err.errorType}</span>
+                          </div>
+                          <div className="report-error-explain">{err.explanationShort}</div>
+                        </div>
+                      ))}
+                    </section>
+                  )}
+
+                  {report.expressionUpgrades.length > 0 && (
+                    <section className="report-section">
+                      <h4>💡 表达升级 ({report.expressionUpgrades.length})</h4>
+                      {report.expressionUpgrades.map((up, i) => (
+                        <div key={i} className="report-upgrade-item">
+                          <div className="report-upgrade-top">
+                            <span className="report-upgrade-original">{up.original}</span>
+                            <span className="report-error-arrow">→</span>
+                            <span className="report-upgrade-suggestion">{up.suggestion}</span>
+                          </div>
+                          <div className="report-upgrade-reason">{up.reason}</div>
+                        </div>
+                      ))}
+                    </section>
+                  )}
+
+                  <section className="report-section">
+                    <h4>🎯 改进建议</h4>
+                    <ul className="report-tips-list">
+                      {report.improvementTips.map((tip, i) => (
+                        <li key={i}>{tip}</li>
+                      ))}
+                    </ul>
+                  </section>
+                </div>
+              )}
+            </div>
+          ) : (<>
           {!hasConv && !isRecording && !captureError && (
             <p className="placeholder">{wsReady ? '点击底部按钮开始录音对话' : '正在建立连接...'}</p>
           )}
@@ -423,6 +643,7 @@ export function App() {
           )}
 
           <div ref={chatEndRef} />
+          </>)}
         </>)}
       </main>
 
@@ -434,6 +655,11 @@ export function App() {
           <button onClick={handleRecordToggle} disabled={!wsReady} className={`record-btn ${isRecording ? 'recording' : ''}`}>
             {isRecording ? '⏹ 停止' : '🎤 开始对话'}
           </button>
+          {turns.length > 0 && (
+          <button onClick={toggleReport} className={`ctrl-btn ${reportOpen ? 'active' : ''}`}>
+            {reportOpen ? '💬 对话' : '📊 报告'}
+          </button>
+          )}
           {(turns.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
           <button onClick={handleInterruptToggle} className="ctrl-btn">
             {interrupted ? '▶ 继续' : '⏹ 打断'}
