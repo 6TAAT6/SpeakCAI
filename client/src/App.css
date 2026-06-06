@@ -24,6 +24,10 @@
   background: var(--bg);
 }
 
+/* 字体大小三档 */
+[data-font-size="md"] { font-size: 18px; }
+[data-font-size="lg"] { font-size: 20px; }
+
 body {
   height: 100vh;
   overflow: hidden;
@@ -50,7 +54,7 @@ body {
 }
 
 .brand {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.3px;
 }
@@ -67,7 +71,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: var(--text);
   cursor: pointer;
   outline: none;
@@ -78,7 +82,7 @@ body {
 }
 
 .status-badge {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 500;
 }
 
@@ -120,7 +124,7 @@ body {
 }
 
 .bubble-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   display: block;
   margin-bottom: 2px;
@@ -157,11 +161,11 @@ body {
 }
 
 .pronounce-score {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: #059669;
   background: #d1fae5;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 6px;
 }
 
@@ -200,7 +204,7 @@ body {
   border-radius: 24px;
   background: var(--accent);
   color: #fff;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
@@ -234,7 +238,7 @@ body {
   border-radius: 20px;
   background: var(--surface);
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -284,18 +288,63 @@ body {
 }
 
 .theme-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: 1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+}
+
+.font-size-wrap {
+  position: relative;
+}
+
+.font-size-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+.font-size-opt {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.font-size-opt:hover {
+  background: var(--bg);
+}
+
+.font-size-opt.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .font-size-menu {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
 /* ---- 深色模式 ---- */
@@ -361,7 +410,7 @@ body {
 }
 
 .history-header h3 {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
 }
 
@@ -391,12 +440,12 @@ body {
 }
 
 .history-scene {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 500;
 }
 
 .history-mode {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
@@ -449,7 +498,7 @@ body {
 }
 
 .report-stat-label {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: var(--text-muted);
@@ -526,7 +575,7 @@ body {
 }
 
 .report-bar-label {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
 }
 
@@ -548,7 +597,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
