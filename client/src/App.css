@@ -282,6 +282,60 @@ body {
   border-left: 3px solid #f59e0b;
 }
 
+.theme-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ---- 深色模式 ---- */
+
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --border: #334155;
+  --accent: #3b82f6;
+  --user-blue: #1e3a5f;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+[data-theme="dark"] .correction-card {
+  background: #2d1f05;
+  border-color: #92400e;
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .correction-header {
+  color: #f59e0b;
+}
+
+[data-theme="dark"] .try-again {
+  background: #3b2504;
+  color: #fcd34d;
+  border-left-color: #f59e0b;
+}
+
+[data-theme="dark"] .user-bubble {
+  background: var(--user-blue);
+}
+
+[data-theme="dark"] .error-message {
+  background: #450a0a;
+  border-color: var(--danger);
+}
+
 /* ---- 动画 ---- */
 
 @keyframes bubble-in {

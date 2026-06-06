@@ -396,11 +396,8 @@ export class WSServer {
     }
     // 停止录音时触发发音评测
     const buf = this.iseBuffer.get(ws);
-    console.log(`🧹 cleanupASR: iseBuf=${!!buf}, audio=${buf?.audio.length || 0}, text="${(buf?.text || '').slice(0, 20)}"`);
     if (buf && buf.audio.length > 0 && buf.text) {
       this.evaluatePronounce(ws, buf.text);
-    } else {
-      console.log('  -> skip ISE: 缺少音频或文本');
     }
   }
 
