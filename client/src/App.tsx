@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 
-interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number }
+interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; tips?: string; tryAgain?: string }
 
 export function App() {
   const { status, messages, lastMessage } = useWebSocket(getWsUrl());
@@ -97,7 +97,12 @@ export function App() {
       case 'llm_done': {
         const text = aiCurrentRef.current;
         if (text) {
-          setTurns((prev) => [...prev, { role: 'ai', text }]);
+          const display = text.replace(/\n?💡\s*Tips:[\s\S]*$/, '').trim();
+          setTurns((prev) => [...prev, {
+            role: 'ai', text: display,
+            tips: lastMessage.tips,
+            tryAgain: lastMessage.tryAgain,
+          }]);
           aiCurrentRef.current = '';
           setAiCurrent('');
         }
@@ -233,16 +238,30 @@ export function App() {
 
         {/* 已完成对话 — 按时间线交替显示 */}
         {turns.map((t, i) => (
-          <div key={i} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
-            <div className="bubble-header">
-              <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
-              {t.score !== undefined && (
-                <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
-                  {t.score}分
-                </span>
-              )}
+          <div key={i}>
+            <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
+              <div className="bubble-header">
+                <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+                {t.score !== undefined && (
+                  <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
+                    {t.score}分
+                  </span>
+                )}
+              </div>
+              <p>{t.text}</p>
             </div>
-            <p>{t.text}</p>
+            {/* 纠错提示卡片 */}
+            {t.tips && (
+              <div className="correction-card">
+                <div className="correction-header">💡 Tips</div>
+                <p>{t.tips}</p>
+                {t.tryAgain && (
+                  <div className="try-again">
+                    🔁 {t.tryAgain}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
 

@@ -23,7 +23,11 @@ export type WSMessage =
 
   // AI 对话流（后端 → 浏览器）
   | { type: 'llm_stream'; text: string }
-  | { type: 'llm_done' }
+  | {
+      type: 'llm_done';
+      tips?: string;
+      tryAgain?: string;
+    }
 
   // 语音合成（后端 → 浏览器）
   | { type: 'tts_audio'; data: string; chunkIndex: number }
@@ -32,7 +36,8 @@ export type WSMessage =
   // 纠错（后端 → 浏览器）
   | {
       type: 'correction';
-      corrections: CorrectionItem[];
+      tips: string;
+      tryAgain?: string;
     }
 
   // 发音评测（后端 → 浏览器）

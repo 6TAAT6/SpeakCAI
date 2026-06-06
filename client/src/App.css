@@ -242,6 +242,46 @@ body {
   background: var(--bg);
 }
 
+/* ---- 纠错提示卡片 ---- */
+
+.correction-card {
+  max-width: 85%;
+  margin-top: -6px;
+  margin-left: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  font-size: 0.85rem;
+  color: #92400e;
+  line-height: 1.5;
+  animation: bubble-in 0.3s ease-out;
+}
+
+.correction-card p {
+  margin: 0;
+}
+
+.correction-header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #b45309;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.try-again {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fef3c7;
+  font-size: 0.85rem;
+  color: #92400e;
+  font-weight: 500;
+  border-left: 3px solid #f59e0b;
+}
+
 /* ---- 动画 ---- */
 
 @keyframes bubble-in {
