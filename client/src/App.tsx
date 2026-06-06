@@ -3,6 +3,7 @@ import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
 import { TIPS_STRIP_RE } from '@shared/types.ts';
 import { ReportAnalysis } from './components/ReportAnalysis.tsx';
+import { TopBar } from './components/TopBar.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
 
 interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
@@ -403,44 +404,21 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="top-bar">
-        <span className="brand">SpeakCAI</span>
-        <div className="config-selectors">
-          <button onClick={openHistory} className="theme-btn" title="历史记录">
-            📋
-          </button>
-          <div className="font-size-wrap">
-            <button onClick={(e) => { e.stopPropagation(); setShowFontMenu(!showFontMenu); }} className="theme-btn" title={`字体: ${fontSize === 'sm' ? '小' : fontSize === 'md' ? '中' : '大'}`}>
-              Aa
-            </button>
-            {showFontMenu && (
-              <div className="font-size-menu">
-                {(Object.entries({ sm: '小', md: '中', lg: '大' }) as [FontSize, string][]).map(([f, label]) => (
-                  <button key={f} onClick={() => pickFontSize(f)} className={`font-size-opt ${fontSize === f ? 'active' : ''}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={cycleTheme} className="theme-btn" title={`主题: ${theme}`}>
-            {theme === 'auto' ? '🌓' : theme === 'dark' ? '🌙' : '☀️'}
-          </button>
-          <select value={scene} onChange={(e) => updateConfig(e.target.value as typeof scene, correctionMode)} className="mini-select">
-            <option value="interview">💼 面试</option>
-            <option value="ordering">🍽️ 点餐</option>
-            <option value="meeting">📊 会议</option>
-          </select>
-          <select value={correctionMode} onChange={(e) => updateConfig(scene, e.target.value as typeof correctionMode)} className="mini-select">
-            <option value="immersive">🌊 沉浸</option>
-            <option value="coach">🎯 教练</option>
-            <option value="strict">📏 严师</option>
-          </select>
-        </div>
-        <span className="status-badge" style={{ color: statusIndicator.color }}>
-          {statusIndicator.emoji} {statusIndicator.text}
-        </span>
-      </header>
+      <TopBar
+        openHistory={openHistory}
+        showFontMenu={showFontMenu}
+        setShowFontMenu={setShowFontMenu}
+        fontSize={fontSize}
+        pickFontSize={pickFontSize}
+        cycleTheme={cycleTheme}
+        theme={theme}
+        scene={scene}
+        correctionMode={correctionMode}
+        updateConfig={updateConfig}
+        statusEmoji={statusIndicator.emoji}
+        statusText={statusIndicator.text}
+        statusColor={statusIndicator.color}
+      />
 
       <main className="chat-area">
         {view === 'history' ? (
