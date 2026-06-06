@@ -61,8 +61,9 @@ export class WSServer {
   // 每个客户端独立的 LLM 实例，避免多客户端并发时 AbortController 互相覆盖
   private llmMap: Map<WebSocket, DeepSeekLLM> = new Map();
   private ttsMap: Map<WebSocket, XunfeiTTS> = new Map();
-  // 每个客户端缓冲一句话的音频帧 + 文本，用于发音评测
-  private iseBuffer: Map<WebSocket, { audio: Buffer[]; text: string }> = new Map();
+  // 每个客户端缓冲当前语音段的音频帧，每句说完整即触发评测并重置
+  // evaluatePronounce 独立 WebSocket，不阻塞 LLM / TTS 管道
+  private iseBuffer: Map<WebSocket, Buffer[]> = new Map();
 
   constructor(private port: number) {}
 
@@ -193,7 +194,7 @@ export class WSServer {
     if (!asr) {
       const pending: Buffer[] = [];
       this.pendingAudio.set(ws, pending);
-      this.iseBuffer.set(ws, { audio: [], text: '' });
+      this.iseBuffer.set(ws, []);
 
       asr = new XunfeiASR(getASRConfig(), {
         onReady: () => {
@@ -214,9 +215,13 @@ export class WSServer {
           console.log(`✅ final: "${text}"`);
           this.send(ws, { type: 'asr_final', text });
           this.handleUserInput(ws, text);
-          // 记录最后一句文本，停止时统一评测
-          const ise = this.iseBuffer.get(ws);
-          if (ise) ise.text = text;
+          // 当前语音段说完 → 立即异步评测（ISE 独立连接，不阻塞 LLM/TTS）
+          const segBuf = this.iseBuffer.get(ws);
+          if (segBuf && segBuf.length > 0 && text) {
+            const utteranceAudio = Buffer.concat(segBuf);
+            this.iseBuffer.set(ws, []); // 重置，下一句从头累积
+            this.evaluatePronounce(ws, text, utteranceAudio);
+          }
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
@@ -232,8 +237,8 @@ export class WSServer {
     // 缓冲音频帧供发音评测（上限 30 秒 ≈ 120 帧 @256ms）
     const ise = this.iseBuffer.get(ws);
     if (ise) {
-      ise.audio.push(buffer);
-      if (ise.audio.length > 120) ise.audio = ise.audio.slice(-120);
+      ise.push(buffer);
+      if (ise.length > 120) this.iseBuffer.set(ws, ise.slice(-120));
     }
 
     const pending = this.pendingAudio.get(ws);
@@ -372,15 +377,10 @@ export class WSServer {
   }
 
   // ---- 发音评测 → 讯飞 ISE ----
-  private evaluatePronounce(ws: WebSocket, text: string): void {
-    console.log(`🔊 ISE evaluate: text="${text.slice(0, 30)}"`);
+  private evaluatePronounce(ws: WebSocket, text: string, audio: Buffer): void {
+    console.log(`🔊 ISE evaluate: text="${text.slice(0, 30)}" audio=${audio.length}B`);
     const cfg = getISEConfig();
     if (!cfg.appId || cfg.appId === 'your_app_id') { console.log('  -> skip: no ISE config'); return; }
-    const buf = this.iseBuffer.get(ws);
-    if (!buf || buf.audio.length === 0) { console.log('  -> skip: no audio buffer'); return; }
-    const audio = Buffer.concat(buf.audio);
-    console.log(`  -> audio: ${audio.length} bytes`);
-    this.iseBuffer.set(ws, { audio: [], text: '' });
 
     const ise = new XunfeiISE(cfg);
     ise.evaluate(text, audio, {
@@ -451,11 +451,8 @@ export class WSServer {
       asr.disconnect();
       this.asrMap.delete(ws);
     }
-    // 停止录音时触发发音评测
-    const buf = this.iseBuffer.get(ws);
-    if (buf && buf.audio.length > 0 && buf.text) {
-      this.evaluatePronounce(ws, buf.text);
-    }
+    // 停止录音时清空评测缓冲（已有文本的语音段已在 onFinal 即时评测完成）
+    this.iseBuffer.set(ws, []);
   }
 
   // ---- 工具方法 ----
