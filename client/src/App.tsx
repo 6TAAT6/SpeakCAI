@@ -138,8 +138,13 @@ export function App() {
 
   // ---- TTS 音频状态 ----
   const audioChunksRef = useRef<Uint8Array[]>([]);
+  const ttsBufferRef = useRef<Uint8Array | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const playbackStartRef = useRef(0);   // audioCtx.currentTime when playback started
+  const playbackOffsetRef = useRef(0);  // seconds into the audio when paused
+  const pausedByUserRef = useRef(false); // 用户主动暂停（打断），防止 onended 异步清空 buffer
+  const aiWasActiveRef = useRef(false);   // 打断时 AI 是否正在流式输出或播报
   const chatEndRef = useRef<HTMLDivElement>(null);
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -182,10 +187,19 @@ export function App() {
 
   const resetConvoTimer = useCallback(() => setConvoStartTime(Date.now()), []);
 
-  const stopAudio = useCallback(() => {
+  const stopAudio = useCallback((paused = false) => {
+    if (paused && activeSourceRef.current && audioCtxRef.current) {
+      // 记录已播放到的位置，用于后续续播
+      playbackOffsetRef.current += audioCtxRef.current.currentTime - playbackStartRef.current;
+      pausedByUserRef.current = true; // 阻止 onended 异步清空 buffer
+    }
     try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
-    audioChunksRef.current = [];
+    if (!paused) {
+      audioChunksRef.current = [];
+      ttsBufferRef.current = null;
+      playbackOffsetRef.current = 0;
+    }
   }, []);
 
   // ---- 场景 + 纠错模式 ----
@@ -206,8 +220,9 @@ export function App() {
     stopAudio();
   }, [stopAudio]);
 
-  const playPCM = useCallback((pcmData: Uint8Array) => {
-    stopAudio();
+  const playPCM = useCallback((pcmData: Uint8Array, offsetSeconds = 0) => {
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
+    activeSourceRef.current = null;
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
     const samples = new Int16Array(pcmData.buffer);
@@ -219,9 +234,21 @@ export function App() {
     source.buffer = buffer;
     source.connect(ctx.destination);
     activeSourceRef.current = source;
-    source.onended = () => { activeSourceRef.current = null; };
-    source.start();
-  }, [stopAudio]);
+    playbackStartRef.current = ctx.currentTime;
+    source.onended = () => {
+      if (pausedByUserRef.current) {
+        // 用户主动暂停（打断），保留 buffer + offset 用于后续续播
+        pausedByUserRef.current = false;
+        return;
+      }
+      activeSourceRef.current = null;
+      playbackOffsetRef.current = 0;
+      ttsBufferRef.current = null;
+      setTtsPlaying(false);
+    };
+    source.start(0, offsetSeconds);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---- 自动滚动 ----
   useEffect(() => {
@@ -307,8 +334,8 @@ export function App() {
           let offset = 0;
           for (const c of chunks) { merged.set(c, offset); offset += c.length; }
           audioChunksRef.current = [];
+          ttsBufferRef.current = merged;
           playPCM(merged);
-          setTimeout(() => setTtsPlaying(false), (merged.byteLength / 2) / 16000 * 1000);
         }
         break;
       }
@@ -328,17 +355,29 @@ export function App() {
   // ---- 打断/继续 ----
   const handleInterruptToggle = () => {
     if (interrupted) {
-      messages.send({ type: 'resume' });
+      // 续播：有 TTS 缓存就从暂停位置续播
+      if (ttsBufferRef.current) {
+        playPCM(ttsBufferRef.current, playbackOffsetRef.current);
+        setTtsPlaying(true);
+      } else if (aiWasActiveRef.current) {
+        // 打断时 AI 正在流式输出（尚无 TTS 缓存），调服务端重新生成
+        messages.send({ type: 'resume' });
+        setAiStreaming(true);
+        setAiCurrent('');
+        aiCurrentRef.current = '';
+      }
+      // 如果打断时 AI 既不播报也不流式，点继续什么都不做
       setInterrupted(false);
-      setAiStreaming(true);
-      setAiCurrent('');
-      aiCurrentRef.current = '';
+      aiWasActiveRef.current = false;
     } else {
+      // 记录打断瞬间 AI 是否正在活跃输出
+      const aiWasActive = aiStreaming || Boolean(aiCurrentRef.current) || ttsPlaying;
+      aiWasActiveRef.current = aiWasActive;
       messages.send({ type: 'interrupt' });
       setAiStreaming(false);
       setTtsPlaying(false);
       setInterrupted(true);
-      stopAudio();
+      stopAudio(true); // paused=true: 保留缓存 + 记录中断位置
     }
   };
 
@@ -367,6 +406,8 @@ export function App() {
       setPartialText('');
       setInterrupted(false);
       audioChunksRef.current = [];
+      ttsBufferRef.current = null;
+      playbackOffsetRef.current = 0;
       await start();
     }
   }, [isRecording, start, stop, resetConvoTimer]);
