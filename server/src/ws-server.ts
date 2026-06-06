@@ -11,6 +11,7 @@ import { XunfeiTTS } from './tts.ts';
 import type { TTSConfig } from './tts.ts';
 import { XunfeiISE } from './pronounce.ts';
 import type { ISEConfig } from './pronounce.ts';
+import { createSession, updateSessionConfig, endSession, addTurn, addPronunciation } from './db.ts';
 
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
@@ -93,6 +94,9 @@ export class WSServer {
 
       console.log(`🔗 新连接: ${sessionId.slice(0, 8)} (当前在线: ${this.clients.size})`);
 
+      // 持久化会话
+      createSession(sessionId);
+
       this.send(ws, { type: 'connected', sessionId });
 
       ws.on('message', (raw) => {
@@ -108,6 +112,7 @@ export class WSServer {
         const client = this.clients.get(ws);
         if (client) {
           console.log(`🔌 断开连接: ${client.sessionId.slice(0, 8)}`);
+          endSession(client.sessionId);
         }
         this.clients.delete(ws);
         this.cleanupASR(ws);
@@ -245,7 +250,10 @@ export class WSServer {
     const session = this.sessionMap.get(ws);
     if (!session) return;
 
-    if (!isResume) session.addUserMessage(text);
+    if (!isResume) {
+      session.addUserMessage(text);
+      addTurn(session.sessionId, 'user', text);
+    }
 
     let llmBuffer = '';
 
@@ -270,6 +278,7 @@ export class WSServer {
         const cleanText = fullText.replace(TIPS_STRIP_RE, '').trim();
 
         session.addAssistantMessage(cleanText);
+        addTurn(session.sessionId, 'assistant', cleanText);
 
         // llm_done 附带纠错信息（前端一次性渲染，无时序竞争）
         this.send(ws, {
@@ -340,6 +349,9 @@ export class WSServer {
           integrityScore: result.integrityScore,
           weakPhones: result.weakPhones,
         });
+        // 持久化评测结果
+        const sid = this.sessionMap.get(ws)?.sessionId;
+        if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore);
       },
       onError: () => { /* 评测失败不影响对话 */ },
     });
@@ -380,6 +392,7 @@ export class WSServer {
     const session = this.sessionMap.get(ws);
     if (session) {
       session.setConfig(msg.payload.scene, msg.payload.correctionMode);
+      updateSessionConfig(session.sessionId, msg.payload.scene, msg.payload.correctionMode);
       console.log(
         `⚙️  场景: ${msg.payload.scene}, 纠错: ${msg.payload.correctionMode}`,
       );
