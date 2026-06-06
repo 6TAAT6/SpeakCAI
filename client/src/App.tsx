@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
+import { TIPS_STRIP_RE } from '@shared/types.ts';
 
 interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; tips?: string; tryAgain?: string }
 
@@ -97,7 +98,7 @@ export function App() {
       case 'llm_done': {
         const text = aiCurrentRef.current;
         if (text) {
-          const display = text.replace(/\n?💡\s*Tips:[\s\S]*$/, '').trim();
+          const display = text.replace(TIPS_STRIP_RE, '').trim();
           setTurns((prev) => [...prev, {
             role: 'ai', text: display,
             tips: lastMessage.tips,

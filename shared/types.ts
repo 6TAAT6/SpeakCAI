@@ -98,3 +98,8 @@ export interface LessonReport {
   expressionUpgrades: Array<{ original: string; suggestion: string; reason: string }>;
   improvementTips: string[];
 }
+
+// ---- 共享工具 ----
+
+/** 匹配 LLM 回复末尾的 💡 Tips: ... 段落（前后端共用，避免 DRY） */
+export const TIPS_STRIP_RE = /\n?💡\s*Tips:[\s\S]*$/;
