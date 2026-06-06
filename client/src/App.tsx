@@ -9,7 +9,7 @@ interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: n
 type Theme = 'auto' | 'dark' | 'light';
 
 const sceneEmoji: Record<string, string> = { interview: '💼', ordering: '🍽️', meeting: '📊' };
-const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '教练', strict: '📏' };
+const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '🎯', strict: '📏' };
 const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练', strict: '严师' };
 
 /** LLM 定性分析渲染组件，聊天报告和历史详情复用 */
@@ -617,40 +617,30 @@ export function App() {
                         const vals = userTurns.map(t => t[k] ?? 0).filter(v => v > 0);
                         return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
                       };
-                      const a = Math.min(avg('accuracy') / 100, 1);
-                      const f = Math.min(avg('fluency') / 100, 1);
-                      const i = Math.min(avg('integrity') / 100, 1);
-                      const total = Math.min((userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length) / 100, 1);
+                      const acc = { val: Math.min(avg('accuracy') / 100, 1), label: '准确度', color: 'var(--accent)' };
+                      const flu = { val: Math.min(avg('fluency') / 100, 1), label: '流利度', color: 'var(--success)' };
+                      const itg = { val: Math.min(avg('integrity') / 100, 1), label: '完整度', color: 'var(--warning)' };
+                      const tot = { val: Math.min((userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length) / 100, 1), label: '总分', color: 'var(--text)' };
+                      const dims = [acc, flu, itg, tot];
+                      const angles = [Math.PI / 2, 0, -Math.PI / 2, Math.PI];
                       const r = 50, cx = 60, cy = 60;
-                      const px = (val: number, angle: number) => `${cx + Math.cos(angle) * r * val},${cy - Math.sin(angle) * r * val}`;
-                      const pts = [
-                        px(a, Math.PI / 2),         // 准确度  ↑
-                        px(f, -Math.PI / 6),        // 流利度  ↗
-                        px(i, -5 * Math.PI / 6),    // 完整度  ↙
-                        px(total, 7 * Math.PI / 6),  // 总分    ↖
-                      ].join(' ');
+                      const px = (v: number, a: number) => `${cx + Math.cos(a) * r * v},${cy - Math.sin(a) * r * v}`;
+                      const pts = dims.map((d, i) => px(d.val, angles[i])).join(' ');
                       return (
                         <div className="report-radar">
                           <svg viewBox="0 0 120 120" className="radar-svg">
-                            {/* 网格 */}
                             {[0.25, 0.5, 0.75, 1].map(s => (
-                              <polygon key={s} points={
-                                [Math.PI / 2, -Math.PI / 6, -5 * Math.PI / 6, 7 * Math.PI / 6]
-                                  .map(a => `${cx + Math.cos(a) * r * s},${cy - Math.sin(a) * r * s}`).join(' ')
-                              } fill="none" stroke="var(--border)" strokeWidth="0.5" />
+                              <polygon key={s} points={angles.map(a => px(s, a)).join(' ')} fill="none" stroke="var(--border)" strokeWidth="0.5" />
                             ))}
-                            {/* 轴线 */}
-                            {[Math.PI / 2, -Math.PI / 6, -5 * Math.PI / 6, 7 * Math.PI / 6].map(a => (
+                            {angles.map(a => (
                               <line key={a} x1={cx} y1={cy} x2={cx + Math.cos(a) * r} y2={cy - Math.sin(a) * r} stroke="var(--border)" strokeWidth="0.5" />
                             ))}
-                            {/* 数据 */}
                             <polygon points={pts} fill="var(--accent)" fillOpacity="0.25" stroke="var(--accent)" strokeWidth="1.5" />
                           </svg>
                           <div className="radar-labels">
-                            <span style={{ color: 'var(--accent)' }}>准确度 {Math.round(avg('accuracy'))}</span>
-                            <span style={{ color: 'var(--success)' }}>流利度 {Math.round(avg('fluency'))}</span>
-                            <span style={{ color: 'var(--warning)' }}>完整度 {Math.round(avg('integrity'))}</span>
-                            <span>总分 {Math.round(userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length)}</span>
+                            {dims.map((d, i) => (
+                              <span key={i} style={{ color: d.color }}>{d.label} {Math.round(d.val * 100)}</span>
+                            ))}
                           </div>
                         </div>
                       );
