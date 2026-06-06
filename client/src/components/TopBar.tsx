@@ -22,7 +22,6 @@ const modes: { key: CorrectionMode; emoji: string; label: string }[] = [
 ];
 
 interface Props {
-  openHistory: () => void;
   showSettings: boolean;
   setShowSettings: (v: boolean) => void;
   fontSize: FontSize;
@@ -58,10 +57,6 @@ export function TopBar(props: Props) {
       <span className="brand">SpeakCAI</span>
 
       <div className="config-selectors">
-        <button onClick={props.openHistory} className="history-btn">
-          📋 历史对话
-        </button>
-
         {/* 练习场景 */}
         <div className="scene-wrap">
           <button onClick={(e) => { e.stopPropagation(); setShowSceneMenu(!showSceneMenu); }} className="scene-trigger">
