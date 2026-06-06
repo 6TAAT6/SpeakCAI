@@ -13,7 +13,7 @@ const DB_PATH = resolve(DATA_DIR, 'speakcai.db');
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   session_id  TEXT PRIMARY KEY,
-  scene       TEXT NOT NULL DEFAULT 'interview',
+  scene       TEXT NOT NULL DEFAULT 'daily',
   mode        TEXT NOT NULL DEFAULT 'coach',
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   ended_at    TEXT
@@ -100,7 +100,7 @@ export function closeDB(): void {
 
 // ---- Session CRUD ----
 
-export function createSession(sessionId: string, scene = 'interview', mode = 'coach'): void {
+export function createSession(sessionId: string, scene = 'daily', mode = 'coach'): void {
   const d = getDB();
   d.prepare('INSERT OR IGNORE INTO sessions (session_id, scene, mode) VALUES (?, ?, ?)').run(sessionId, scene, mode);
 }

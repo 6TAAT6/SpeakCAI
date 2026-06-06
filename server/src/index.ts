@@ -60,8 +60,8 @@ app.delete('/api/sessions/:id', (req, res) => {
 // ---- 学习报告生成 ----
 
 function buildReportPrompt(body: ReportRequest): string {
-  const sceneNames: Record<string, string> = { interview: '面试', ordering: '点餐', meeting: '会议' };
-  const modeNames: Record<string, string> = { immersive: '沉浸（不纠错）', coach: '教练（轻量提示）', strict: '严师（要求重说）' };
+  const sceneNames: Record<string, string> = { daily: '日常', interview: '面试', ordering: '点餐', meeting: '会议', travel: '旅游', shopping: '购物', hotel: '酒店' };
+  const modeNames: Record<string, string> = { immersive: '沉浸（不纠错）', coach: '教练（要求重说）' };
 
   let transcript = '';
   for (const t of body.turns) {

@@ -15,7 +15,7 @@ export class ConversationSession {
 
   constructor(
     sessionId: string,
-    scene: Scene = 'interview',
+    scene: Scene = 'daily',
     correctionMode: CorrectionMode = 'coach',
   ) {
     this.sessionId = sessionId;
@@ -76,6 +76,14 @@ export class ConversationSession {
 
 // ---- 场景 ----
 const SCENE_PROMPTS: Record<Scene, string> = {
+  daily: [
+    'You are a friendly English-speaking friend chatting with the user.',
+    '- Talk about daily life topics: hobbies, weather, food, weekend plans, current events, etc.',
+    '- Keep the conversation light, natural, and engaging.',
+    '- Ask open-ended questions to keep the conversation going.',
+    '- Keep responses concise (2-4 sentences).',
+  ].join('\n'),
+
   interview: [
     'You are a professional English interview coach. The user is practicing for a job interview.',
     '- Ask realistic interview questions one at a time.',
@@ -100,6 +108,30 @@ const SCENE_PROMPTS: Record<Scene, string> = {
     '- Keep the conversation productive and collaborative.',
     '- Keep responses concise (2-4 sentences).',
   ].join('\n'),
+
+  travel: [
+    'You are a friendly local or tour guide in an English-speaking country. The user is a traveler.',
+    '- Help the user practice travel-related conversations: asking for directions, booking tickets, sightseeing tips, etc.',
+    '- Be helpful, informative, and encouraging.',
+    '- Use natural travel-related vocabulary and expressions.',
+    '- Keep responses concise (2-4 sentences).',
+  ].join('\n'),
+
+  shopping: [
+    'You are a shop assistant in an English-speaking store. The user is a customer.',
+    '- Help the user practice shopping conversations: asking about prices, sizes, trying items, returns, etc.',
+    '- Be polite and helpful like a real shop assistant.',
+    '- Use natural shopping-related vocabulary.',
+    '- Keep responses concise (2-4 sentences).',
+  ].join('\n'),
+
+  hotel: [
+    'You are a hotel front desk clerk in an English-speaking hotel. The user is a guest.',
+    '- Help the user practice hotel check-in conversations: booking, room requests, amenities, complaints, etc.',
+    '- Be professional and courteous like a real hotel clerk.',
+    '- Use natural hotel-related vocabulary and expressions.',
+    '- Keep responses concise (2-4 sentences).',
+  ].join('\n'),
 };
 
 const BILINGUAL_INSTRUCTION = [
@@ -120,15 +152,7 @@ const CORRECTION_PROMPTS: Record<CorrectionMode, string> = {
   ].join('\n'),
 
   coach: [
-    'Correction mode: 教练模式（轻量提醒）',
-    '- If the user makes a grammar or expression error, briefly note 1-2 key mistakes',
-    '  at the end of your response, after the Chinese translation, prefixed with "💡 Tips:".',
-    '- Focus on the most important errors, not every minor mistake.',
-    '- Be encouraging, not harsh.',
-  ].join('\n'),
-
-  strict: [
-    'Correction mode: 严师模式（追问重说）',
+    'Correction mode: 教练模式（追问重说）',
     '- If the user makes a grammar or expression error, point it out clearly.',
     '  Prefixed with "💡 Tips:" after the Chinese translation.',
     '- Ask the user to repeat the sentence correctly.',

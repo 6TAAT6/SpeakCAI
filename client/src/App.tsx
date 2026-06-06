@@ -7,12 +7,12 @@ import { BottomBar } from './components/BottomBar.tsx';
 import { HistoryView } from './components/HistoryView.tsx';
 import { ReportView } from './components/ReportView.tsx';
 import { ChatView } from './components/ChatView.tsx';
-import type { LLMAnalysis } from '@shared/types.ts';
+import type { LLMAnalysis, Scene, CorrectionMode } from '@shared/types.ts';
 import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
 
-const sceneEmoji: Record<string, string> = { interview: '💼', ordering: '🍽️', meeting: '📊' };
-const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '🎯', strict: '📏' };
-const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练', strict: '严师' };
+const sceneEmoji: Record<string, string> = { daily: '💬', interview: '💼', ordering: '🍽️', meeting: '📊', travel: '✈️', shopping: '🛍️', hotel: '🏨' };
+const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '🎯' };
+const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练' };
 
 function loadTheme(): Theme {
   const stored = localStorage.getItem('theme');
@@ -203,8 +203,8 @@ export function App() {
   }, []);
 
   // ---- 场景 + 纠错模式 ----
-  const [scene, setScene] = useState<'interview' | 'ordering' | 'meeting'>('interview');
-  const [correctionMode, setCorrectionMode] = useState<'immersive' | 'coach' | 'strict'>('coach');
+  const [scene, setScene] = useState<Scene>('daily');
+  const [correctionMode, setCorrectionMode] = useState<CorrectionMode>('coach');
 
   const updateConfig = useCallback((s: typeof scene, m: typeof correctionMode) => {
     setScene(s);

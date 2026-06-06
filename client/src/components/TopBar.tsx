@@ -43,14 +43,17 @@ export function TopBar(props: Props) {
           {props.theme === 'auto' ? '🌓' : props.theme === 'dark' ? '🌙' : '☀️'}
         </button>
         <select value={props.scene} onChange={(e) => props.updateConfig(e.target.value as Scene, props.correctionMode)} className="mini-select">
+          <option value="daily">💬 日常</option>
           <option value="interview">💼 面试</option>
           <option value="ordering">🍽️ 点餐</option>
           <option value="meeting">📊 会议</option>
+          <option value="travel">✈️ 旅游</option>
+          <option value="shopping">🛍️ 购物</option>
+          <option value="hotel">🏨 酒店</option>
         </select>
         <select value={props.correctionMode} onChange={(e) => props.updateConfig(props.scene, e.target.value as CorrectionMode)} className="mini-select">
           <option value="immersive">🌊 沉浸</option>
           <option value="coach">🎯 教练</option>
-          <option value="strict">📏 严师</option>
         </select>
       </div>
       <span className="status-badge" style={{ color: props.statusColor }}>

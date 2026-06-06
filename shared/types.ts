@@ -2,10 +2,10 @@
 // 此文件被 client/ 和 server/ 共同引用，确保消息协议一致
 
 // ---- 场景类型 ----
-export type Scene = 'interview' | 'ordering' | 'meeting';
+export type Scene = 'daily' | 'interview' | 'ordering' | 'meeting' | 'travel' | 'shopping' | 'hotel';
 
 // ---- 纠错模式 ----
-export type CorrectionMode = 'immersive' | 'coach' | 'strict';
+export type CorrectionMode = 'immersive' | 'coach';
 
 // ---- WebSocket 消息类型枚举 ----
 export type WSMessage =
