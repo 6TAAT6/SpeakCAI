@@ -143,6 +143,8 @@ export function App() {
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const playbackStartRef = useRef(0);   // audioCtx.currentTime when playback started
   const playbackOffsetRef = useRef(0);  // seconds into the audio when paused
+  const pausedByUserRef = useRef(false); // 用户主动暂停（打断），防止 onended 异步清空 buffer
+  const aiWasActiveRef = useRef(false);   // 打断时 AI 是否正在流式输出或播报
   const chatEndRef = useRef<HTMLDivElement>(null);
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -189,6 +191,7 @@ export function App() {
     if (paused && activeSourceRef.current && audioCtxRef.current) {
       // 记录已播放到的位置，用于后续续播
       playbackOffsetRef.current += audioCtxRef.current.currentTime - playbackStartRef.current;
+      pausedByUserRef.current = true; // 阻止 onended 异步清空 buffer
     }
     try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
@@ -233,11 +236,18 @@ export function App() {
     activeSourceRef.current = source;
     playbackStartRef.current = ctx.currentTime;
     source.onended = () => {
+      if (pausedByUserRef.current) {
+        // 用户主动暂停（打断），保留 buffer + offset 用于后续续播
+        pausedByUserRef.current = false;
+        return;
+      }
       activeSourceRef.current = null;
       playbackOffsetRef.current = 0;
       ttsBufferRef.current = null;
+      setTtsPlaying(false);
     };
     source.start(0, offsetSeconds);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- 自动滚动 ----
@@ -345,18 +355,24 @@ export function App() {
   // ---- 打断/继续 ----
   const handleInterruptToggle = () => {
     if (interrupted) {
-      // 续播：从暂停位置继续，无缓存才调服务端重新生成
+      // 续播：有 TTS 缓存就从暂停位置续播
       if (ttsBufferRef.current) {
         playPCM(ttsBufferRef.current, playbackOffsetRef.current);
         setTtsPlaying(true);
-      } else {
+      } else if (aiWasActiveRef.current) {
+        // 打断时 AI 正在流式输出（尚无 TTS 缓存），调服务端重新生成
         messages.send({ type: 'resume' });
         setAiStreaming(true);
         setAiCurrent('');
         aiCurrentRef.current = '';
       }
+      // 如果打断时 AI 既不播报也不流式，点继续什么都不做
       setInterrupted(false);
+      aiWasActiveRef.current = false;
     } else {
+      // 记录打断瞬间 AI 是否正在活跃输出
+      const aiWasActive = aiStreaming || Boolean(aiCurrentRef.current) || ttsPlaying;
+      aiWasActiveRef.current = aiWasActive;
       messages.send({ type: 'interrupt' });
       setAiStreaming(false);
       setTtsPlaying(false);
