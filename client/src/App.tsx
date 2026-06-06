@@ -138,8 +138,11 @@ export function App() {
 
   // ---- TTS 音频状态 ----
   const audioChunksRef = useRef<Uint8Array[]>([]);
+  const ttsBufferRef = useRef<Uint8Array | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const playbackStartRef = useRef(0);   // audioCtx.currentTime when playback started
+  const playbackOffsetRef = useRef(0);  // seconds into the audio when paused
   const chatEndRef = useRef<HTMLDivElement>(null);
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -182,10 +185,18 @@ export function App() {
 
   const resetConvoTimer = useCallback(() => setConvoStartTime(Date.now()), []);
 
-  const stopAudio = useCallback(() => {
+  const stopAudio = useCallback((paused = false) => {
+    if (paused && activeSourceRef.current && audioCtxRef.current) {
+      // 记录已播放到的位置，用于后续续播
+      playbackOffsetRef.current += audioCtxRef.current.currentTime - playbackStartRef.current;
+    }
     try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
-    audioChunksRef.current = [];
+    if (!paused) {
+      audioChunksRef.current = [];
+      ttsBufferRef.current = null;
+      playbackOffsetRef.current = 0;
+    }
   }, []);
 
   // ---- 场景 + 纠错模式 ----
@@ -206,8 +217,9 @@ export function App() {
     stopAudio();
   }, [stopAudio]);
 
-  const playPCM = useCallback((pcmData: Uint8Array) => {
-    stopAudio();
+  const playPCM = useCallback((pcmData: Uint8Array, offsetSeconds = 0) => {
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
+    activeSourceRef.current = null;
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
     const samples = new Int16Array(pcmData.buffer);
@@ -219,9 +231,14 @@ export function App() {
     source.buffer = buffer;
     source.connect(ctx.destination);
     activeSourceRef.current = source;
-    source.onended = () => { activeSourceRef.current = null; };
-    source.start();
-  }, [stopAudio]);
+    playbackStartRef.current = ctx.currentTime;
+    source.onended = () => {
+      activeSourceRef.current = null;
+      playbackOffsetRef.current = 0;
+      ttsBufferRef.current = null;
+    };
+    source.start(0, offsetSeconds);
+  }, []);
 
   // ---- 自动滚动 ----
   useEffect(() => {
@@ -307,8 +324,8 @@ export function App() {
           let offset = 0;
           for (const c of chunks) { merged.set(c, offset); offset += c.length; }
           audioChunksRef.current = [];
+          ttsBufferRef.current = merged;
           playPCM(merged);
-          setTimeout(() => setTtsPlaying(false), (merged.byteLength / 2) / 16000 * 1000);
         }
         break;
       }
@@ -328,17 +345,23 @@ export function App() {
   // ---- 打断/继续 ----
   const handleInterruptToggle = () => {
     if (interrupted) {
-      messages.send({ type: 'resume' });
+      // 续播：从暂停位置继续，无缓存才调服务端重新生成
+      if (ttsBufferRef.current) {
+        playPCM(ttsBufferRef.current, playbackOffsetRef.current);
+        setTtsPlaying(true);
+      } else {
+        messages.send({ type: 'resume' });
+        setAiStreaming(true);
+        setAiCurrent('');
+        aiCurrentRef.current = '';
+      }
       setInterrupted(false);
-      setAiStreaming(true);
-      setAiCurrent('');
-      aiCurrentRef.current = '';
     } else {
       messages.send({ type: 'interrupt' });
       setAiStreaming(false);
       setTtsPlaying(false);
       setInterrupted(true);
-      stopAudio();
+      stopAudio(true); // paused=true: 保留缓存 + 记录中断位置
     }
   };
 
@@ -367,6 +390,8 @@ export function App() {
       setPartialText('');
       setInterrupted(false);
       audioChunksRef.current = [];
+      ttsBufferRef.current = null;
+      playbackOffsetRef.current = 0;
       await start();
     }
   }, [isRecording, start, stop, resetConvoTimer]);
