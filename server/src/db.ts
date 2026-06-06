@@ -107,7 +107,7 @@ export function endSession(sessionId: string): void {
 
 export function getSessions(limit = 50): SessionRow[] {
   const d = getDB();
-  return d.prepare('SELECT * FROM sessions ORDER BY created_at DESC LIMIT ?').all(limit) as SessionRow[];
+  return d.prepare('SELECT * FROM sessions WHERE session_id IN (SELECT DISTINCT session_id FROM turns) ORDER BY created_at DESC LIMIT ?').all(limit) as SessionRow[];
 }
 
 // ---- Turn CRUD ----

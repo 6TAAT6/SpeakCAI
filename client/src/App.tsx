@@ -25,6 +25,37 @@ export function App() {
   const { status, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
 
+  // ---- 页面视图 ----
+  const [view, setView] = useState<'chat' | 'history'>('chat');
+
+  // ---- 对话历史 ----
+  interface Session { session_id: string; scene: string; mode: string; created_at: string; ended_at: string | null }
+  interface TurnRow { id: number; session_id: string; role: string; text: string; created_at: string }
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [sessionTurns, setSessionTurns] = useState<TurnRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const openHistory = useCallback(async () => {
+    setView('history');
+    setHistoryLoading(true);
+    try {
+      const r = await fetch('/api/sessions');
+      const data = await r.json();
+      setSessions(data); // 后端已过滤空会话
+    } catch { /* ignore */ }
+    setHistoryLoading(false);
+  }, []);
+
+  const viewSession = useCallback(async (sessionId: string) => {
+    setSelectedSession(sessionId);
+    try {
+      const r = await fetch(`/api/sessions/${sessionId}/turns`);
+      const data = await r.json();
+      setSessionTurns(data);
+    } catch { /* ignore */ }
+  }, []);
+
   // ---- 深色模式 ----
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const cycleTheme = () => {
@@ -248,6 +279,9 @@ export function App() {
       <header className="top-bar">
         <span className="brand">SpeakCAI</span>
         <div className="config-selectors">
+          <button onClick={openHistory} className="theme-btn" title="历史记录">
+            📋
+          </button>
           <button onClick={cycleTheme} className="theme-btn" title={`主题: ${theme}`}>
             {theme === 'auto' ? '🌓' : theme === 'dark' ? '🌙' : '☀️'}
           </button>
@@ -268,75 +302,119 @@ export function App() {
       </header>
 
       <main className="chat-area">
-        {!hasConv && !isRecording && !captureError && (
-          <p className="placeholder">{wsReady ? '点击底部按钮开始录音对话' : '正在建立连接...'}</p>
-        )}
-        {captureError && <p className="error-message">{captureError}</p>}
-
-        {/* 已完成对话 — 按时间线交替显示 */}
-        {turns.map((t, i) => (
-          <div key={i}>
-            <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
-              <div className="bubble-header">
-                <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
-                {t.score !== undefined && (
-                  <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
-                    {t.score}分
-                  </span>
-                )}
-              </div>
-              <p>{t.text}</p>
+        {view === 'history' ? (
+          <div className="history-panel">
+            <div className="history-header">
+              <button onClick={() => { setView('chat'); setSelectedSession(null); }} className="ctrl-btn">← 返回</button>
+              <h3>对话历史</h3>
             </div>
-            {/* 纠错提示卡片 */}
-            {t.tips && (
-              <div className="correction-card">
-                <div className="correction-header">💡 Tips</div>
-                <p>{t.tips}</p>
-                {t.tryAgain && (
-                  <div className="try-again">
-                    🔁 {t.tryAgain}
+            {historyLoading ? (
+              <p className="placeholder" style={{ marginTop: '20%' }}>加载中...</p>
+            ) : selectedSession ? (
+              <div className="history-turns">
+                <button onClick={() => { setSelectedSession(null); setSessionTurns([]); }} className="ctrl-btn" style={{ marginBottom: 8 }}>← 返回列表</button>
+                {sessionTurns.map((t) => (
+                  <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
+                    <div className="bubble-header">
+                      <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{t.created_at}</span>
+                    </div>
+                    <p>{t.text}</p>
                   </div>
+                ))}
+                {sessionTurns.length === 0 && <p className="placeholder" style={{ marginTop: '20%' }}>该会话暂无对话记录</p>}
+              </div>
+            ) : (
+              <div className="history-list">
+                {sessions.length === 0 ? (
+                  <p className="placeholder" style={{ marginTop: '20%' }}>暂无对话历史，开始一次对话吧</p>
+                ) : (
+                  sessions.map((s) => (
+                    <div key={s.session_id} className="history-item" onClick={() => viewSession(s.session_id)}>
+                      <div className="history-item-top">
+                        <span className="history-scene">{s.scene === 'interview' ? '💼' : s.scene === 'ordering' ? '🍽️' : '📊'} {s.scene}</span>
+                        <span className="history-mode">{s.mode === 'coach' ? '🎯' : s.mode === 'strict' ? '📏' : '🌊'} {s.mode}</span>
+                        <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.created_at.slice(0, 16).replace('T', ' ')}</span>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             )}
           </div>
-        ))}
+        ) : (<>
+          {!hasConv && !isRecording && !captureError && (
+            <p className="placeholder">{wsReady ? '点击底部按钮开始录音对话' : '正在建立连接...'}</p>
+          )}
+          {captureError && <p className="error-message">{captureError}</p>}
 
-        {/* 当前正在说的 partial */}
-        {partialText && (
-          <div className="bubble user-bubble partial">
-            <span className="bubble-label">You</span>
-            <p>{partialText}</p>
-          </div>
-        )}
-
-        {/* AI 流式输出中 */}
-        {(aiCurrent || aiStreaming) && (
-          <div className="bubble ai-bubble">
-            <div className="bubble-header">
-              <span className="bubble-label">🤖 AI</span>
-              {aiStreaming && <span className="streaming-dot" />}
+          {/* 已完成对话 — 按时间线交替显示 */}
+          {turns.map((t, i) => (
+            <div key={i}>
+              <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
+                <div className="bubble-header">
+                  <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+                  {t.score !== undefined && (
+                    <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
+                      {t.score}分
+                    </span>
+                  )}
+                </div>
+                <p>{t.text}</p>
+              </div>
+              {/* 纠错提示卡片 */}
+              {t.tips && (
+                <div className="correction-card">
+                  <div className="correction-header">💡 Tips</div>
+                  <p>{t.tips}</p>
+                  {t.tryAgain && (
+                    <div className="try-again">
+                      🔁 {t.tryAgain}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <p>{aiCurrent || '...'}</p>
-          </div>
-        )}
+          ))}
 
-        <div ref={chatEndRef} />
+          {/* 当前正在说的 partial */}
+          {partialText && (
+            <div className="bubble user-bubble partial">
+              <span className="bubble-label">You</span>
+              <p>{partialText}</p>
+            </div>
+          )}
+
+          {/* AI 流式输出中 */}
+          {(aiCurrent || aiStreaming) && (
+            <div className="bubble ai-bubble">
+              <div className="bubble-header">
+                <span className="bubble-label">🤖 AI</span>
+                {aiStreaming && <span className="streaming-dot" />}
+              </div>
+              <p>{aiCurrent || '...'}</p>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </>)}
       </main>
 
-      <footer className="bottom-bar">
-        {isRecording && (
-          <span className="record-timer">● {frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s</span>
-        )}
-        <button onClick={handleRecordToggle} disabled={!wsReady} className={`record-btn ${isRecording ? 'recording' : ''}`}>
-          {isRecording ? '⏹ 停止' : '🎤 开始对话'}
-        </button>
-        {(turns.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
+      {view === 'chat' && (
+        <footer className="bottom-bar">
+          {isRecording && (
+            <span className="record-timer">● {frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s</span>
+          )}
+          <button onClick={handleRecordToggle} disabled={!wsReady} className={`record-btn ${isRecording ? 'recording' : ''}`}>
+            {isRecording ? '⏹ 停止' : '🎤 开始对话'}
+          </button>
+          {(turns.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
           <button onClick={handleInterruptToggle} className="ctrl-btn">
             {interrupted ? '▶ 继续' : '⏹ 打断'}
           </button>
-        )}
-      </footer>
+          )}
+        </footer>
+      )}
     </div>
   );
 }

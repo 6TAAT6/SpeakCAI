@@ -19,9 +19,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+import { getSessions, getTurns } from './db.ts';
+
 // 健康检查
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+// 对话历史 — 会话列表
+app.get('/api/sessions', (_req, res) => {
+  try {
+    const sessions = getSessions(50);
+    res.json(sessions);
+  } catch (e) {
+    res.status(500).json({ error: '数据库查询失败' });
+  }
+});
+
+// 对话历史 — 单场对话轮次
+app.get('/api/sessions/:id/turns', (req, res) => {
+  try {
+    const turns = getTurns(req.params.id);
+    res.json(turns);
+  } catch (e) {
+    res.status(500).json({ error: '数据库查询失败' });
+  }
 });
 
 // 启动 HTTP
