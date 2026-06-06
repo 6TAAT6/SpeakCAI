@@ -57,6 +57,20 @@ app.delete('/api/sessions/:id', (req, res) => {
   }
 });
 
+// 对话历史 — 批量删除会话
+app.post('/api/sessions/batch-delete', (req, res) => {
+  try {
+    const { ids } = req.body as { ids?: string[] };
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: '请提供要删除的会话 ID 列表' });
+    }
+    for (const id of ids) deleteSession(id);
+    res.json({ ok: true, deleted: ids.length });
+  } catch (e) {
+    res.status(500).json({ error: '批量删除失败' });
+  }
+});
+
 // ---- 学习报告生成 ----
 
 function buildReportPrompt(body: ReportRequest): string {
