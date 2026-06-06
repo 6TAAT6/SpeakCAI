@@ -126,9 +126,7 @@ export function App() {
 
   // ---- 深色模式 ----
   const [theme, setTheme] = useState<Theme>(loadTheme);
-  const cycleTheme = () => {
-    const next: Record<Theme, Theme> = { auto: 'dark', dark: 'light', light: 'auto' };
-    const t = next[theme];
+  const pickTheme = (t: Theme) => {
     localStorage.setItem('theme', t);
     setTheme(applyTheme(t));
   };
@@ -146,22 +144,23 @@ export function App() {
     const stored = localStorage.getItem('fontSize');
     return stored === 'md' || stored === 'lg' ? stored : 'sm';
   });
-  const [showFontMenu, setShowFontMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const pickFontSize = (f: FontSize) => {
     document.documentElement.setAttribute('data-font-size', f);
     localStorage.setItem('fontSize', f);
     setFontSize(f);
-    setShowFontMenu(false);
   };
   useEffect(() => {
     document.documentElement.setAttribute('data-font-size', fontSize);
   }, [fontSize]);
   useEffect(() => {
-    if (!showFontMenu) return;
-    const close = () => setShowFontMenu(false);
+    if (!showSettings) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.settings-wrap')) setShowSettings(false);
+    };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
-  }, [showFontMenu]);
+  }, [showSettings]);
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -523,12 +522,12 @@ export function App() {
     <div className="app">
       <TopBar
         openHistory={openHistory}
-        showFontMenu={showFontMenu}
-        setShowFontMenu={setShowFontMenu}
+        showSettings={showSettings}
+        setShowSettings={setShowSettings}
         fontSize={fontSize}
         pickFontSize={pickFontSize}
-        cycleTheme={cycleTheme}
         theme={theme}
+        pickTheme={pickTheme}
         scene={scene}
         correctionMode={correctionMode}
         updateConfig={updateConfig}

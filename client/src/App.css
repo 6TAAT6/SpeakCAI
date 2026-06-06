@@ -61,24 +61,178 @@ body {
 
 .config-selectors {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
   margin-right: 12px;
 }
 
-.mini-select {
-  padding: 3px 8px;
+/* 历史对话按钮 */
+.history-btn {
+  padding: 5px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
-  font-size: 0.85rem;
   color: var(--text);
+  font-size: 0.85rem;
   cursor: pointer;
-  outline: none;
+  white-space: nowrap;
 }
 
-.mini-select:focus {
+.history-btn:hover {
+  background: var(--bg);
+}
+
+/* 练习场景 */
+.scene-wrap {
+  position: relative;
+}
+
+.scene-trigger {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scene-trigger:hover {
+  background: var(--bg);
+}
+
+.scene-panel {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 240px;
+}
+
+.scene-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.scene-section-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.scene-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.scene-opt {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scene-opt:hover {
+  background: var(--bg);
+}
+
+.scene-opt.active {
   border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 设置按钮 */
+.settings-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settings-btn:hover {
+  background: var(--bg);
+}
+
+/* 设置面板 */
+.settings-wrap {
+  position: relative;
+}
+
+.settings-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 180px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settings-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.settings-options {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-opt {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settings-opt:hover {
+  background: var(--bg);
+}
+
+.settings-opt.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .status-badge {
