@@ -28,12 +28,12 @@ interface UseAudioCaptureReturn {
   error: string | null;
 }
 
-/** Float32 [-1.0, 1.0] → Int16 [-32768, 32767] */
+/** Float32 [-1.0, 1.0] → Int16 [-32767, 32767]（对称映射，避免直流偏移） */
 function float32ToInt16(float32: Float32Array): Int16Array {
   const int16 = new Int16Array(float32.length);
   for (let i = 0; i < float32.length; i++) {
     const s = Math.max(-1, Math.min(1, float32[i]));
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    int16[i] = Math.round(s * 32767);
   }
   return int16;
 }

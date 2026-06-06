@@ -62,6 +62,7 @@ export class XunfeiISE {
           ent: 'en_vip',
           category: 'read_sentence',
           cmd: 'ssb',
+          // U+FEFF BOM 前缀 — 讯飞 ISE API 需要此标记来识别文本编码
           text: '﻿' + text,
           tte: 'utf-8',
           rstcd: 'utf8',

@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import type { WSMessage } from '../../shared/types.ts';
+import { TIPS_STRIP_RE } from '../../shared/types.ts';
 import { XunfeiASR } from './asr.ts';
 import type { ASRConfig } from './asr.ts';
 import { ConversationSession } from './session.ts';
@@ -247,7 +248,6 @@ export class WSServer {
     if (!isResume) session.addUserMessage(text);
 
     let llmBuffer = '';
-    let aborted = false;
 
     await llm.chat(session.getMessages(), {
       onStream: (chunk: string) => {
@@ -255,7 +255,7 @@ export class WSServer {
         this.send(ws, { type: 'llm_stream', text: chunk });
       },
       onDone: (fullText: string) => {
-        if (!fullText || aborted) {
+        if (!fullText) {
           this.send(ws, { type: 'llm_done' });
           return;
         }
@@ -267,7 +267,7 @@ export class WSServer {
         const tryAgain = tryAgainMatch?.[1]?.trim() || '';
 
         // 清洗文本（去掉纠错部分用于 TTS + 会话存储）
-        const cleanText = fullText.replace(/\n?💡\s*Tips:[\s\S]*$/, '').trim();
+        const cleanText = fullText.replace(TIPS_STRIP_RE, '').trim();
 
         session.addAssistantMessage(cleanText);
 

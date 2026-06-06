@@ -54,7 +54,7 @@ export class DeepSeekLLM {
           messages,
           stream: true,
           temperature: 0.8,
-          max_tokens: 512,
+          max_tokens: 1024,
         }),
         signal: this.abortController.signal,
       });
