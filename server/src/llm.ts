@@ -1,6 +1,6 @@
 // ===== DeepSeek 流式对话客户端 =====
-// 调用 DeepSeek Chat API（OpenAI 兼容），SSE 流式返回对话内容
-// 双语输出由 System Prompt 控制（session.ts），此处只负责 API 调用
+// 调用 DeepSeek Chat API（OpenAI 兼容），SSE 流式返回对话 + 非流式翻译
+// 模型只生成英语，翻译由独立 chatOnce 调用完成
 
 import type { ChatMessage } from './session.ts';
 
@@ -53,7 +53,7 @@ export class DeepSeekLLM {
           model: this.config.model,
           messages,
           stream: true,
-          temperature: 0.8,
+          temperature: 0.3,
           max_tokens: 1024,
         }),
         signal: AbortSignal.any([this.abortController.signal, AbortSignal.timeout(30_000)]),
@@ -109,6 +109,33 @@ export class DeepSeekLLM {
         return;
       }
       handler.onError(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  /** 简单非流式请求（翻译/纠错等辅助任务） */
+  async chatOnce(prompt: string): Promise<string> {
+    try {
+      const response = await fetch(`${API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+          temperature: 0.3,
+          max_tokens: 256,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!response.ok) return '';
+      const data = await response.json() as any;
+      return data?.choices?.[0]?.message?.content?.trim() || '';
+    } catch {
+      return '';
     }
   }
 

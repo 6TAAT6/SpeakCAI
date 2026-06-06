@@ -1,7 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import type { WSMessage } from '../../shared/types.ts';
-import { TIPS_STRIP_RE } from '../../shared/types.ts';
 import { XunfeiASR } from './asr.ts';
 import type { ASRConfig } from './asr.ts';
 import { ConversationSession } from './session.ts';
@@ -245,7 +244,7 @@ export class WSServer {
     }
   }
 
-  // ---- 用户输入 → LLM ----
+  // ---- 用户输入 → LLM 英文 + 翻译纠错 ----
   private async handleUserInput(ws: WebSocket, text: string, isResume = false): Promise<void> {
     const llm = this.llmMap.get(ws);
     if (!llm) return;
@@ -258,46 +257,88 @@ export class WSServer {
       addTurn(session.sessionId, 'user', text);
     }
 
-    let llmBuffer = '';
+    let englishText = '';
 
+    // Step 1: 生成英语（缓冲后一次性发送，保证字幕=TTS 文本一致）
     await llm.chat(session.getMessages(), {
       onStream: (chunk: string) => {
-        llmBuffer += chunk;
-        this.send(ws, { type: 'llm_stream', text: chunk });
+        englishText += chunk;
       },
-      onDone: (fullText: string) => {
-        if (!fullText) {
+      onDone: () => {
+        englishText = englishText.trim();
+        if (!englishText) {
           this.send(ws, { type: 'llm_done' });
           return;
         }
 
-        // 解析纠错内容：💡 Tips: ... 和 🔁 Try again: ...
-        const tipsMatch = fullText.match(/💡\s*Tips:\s*([\s\S]*?)(?:🔁\s*Try again:|$)/);
-        const tryAgainMatch = fullText.match(/🔁\s*Try again:\s*([\s\S]*)/);
-        const tips = tipsMatch?.[1]?.trim() || '';
-        const tryAgain = tryAgainMatch?.[1]?.trim() || '';
+        session.addAssistantMessage(englishText);
+        addTurn(session.sessionId, 'assistant', englishText);
 
-        // 清洗文本（去掉纠错部分用于 TTS + 会话存储）
-        const cleanText = fullText.replace(TIPS_STRIP_RE, '').trim();
+        // 一次性发送完整英语（字幕=TTS 文本，保证一致）
+        this.send(ws, { type: 'llm_done', text: englishText });
 
-        session.addAssistantMessage(cleanText);
-        addTurn(session.sessionId, 'assistant', cleanText);
+        this.handleTTS(ws, englishText);
 
-        // llm_done 附带纠错信息（前端一次性渲染，无时序竞争）
-        this.send(ws, {
-          type: 'llm_done',
-          tips: tips || undefined,
-          tryAgain: tryAgain || undefined,
-        });
-
-        // TTS 用清洗后的文本（不朗读纠错提示）
-        this.handleTTS(ws, cleanText);
+        // Step 2: 异步中文翻译 + 纠错
+        this.handleTranslation(ws, englishText, text);
       },
       onError: (err: Error) => {
         console.error(`⚠️ LLM 错误: ${err.message}`);
         this.send(ws, { type: 'llm_done' });
       },
     });
+  }
+
+  // ---- 翻译 + 纠错（独立 LLM 调用，不阻塞 TTS）----
+  private async handleTranslation(
+    ws: WebSocket,
+    englishText: string,
+    userText: string,
+  ): Promise<void> {
+    const llm = this.llmMap.get(ws);
+    if (!llm) return;
+
+    const session = this.sessionMap.get(ws);
+    const mode = session?.correctionMode || 'coach';
+
+    const correctionPrompt = mode === 'immersive'
+      ? 'The mode is immersive. Do NOT correct errors, just translate.'
+      : 'If the student made grammar mistakes, add 💡 Tips: and 🔁 Try again: in Chinese. If no mistakes, just translate.';
+
+    const translatePrompt = [
+      `AI English reply: "${englishText}"`,
+      `Student's last message: "${userText}"`,
+      '',
+      'Translate the AI reply to Chinese. Also check if the student made any English errors.',
+      correctionPrompt,
+      '',
+      'Output format:',
+      '中文翻译：<translation>',
+      '(if errors found) 💡 Tips: <error explanation in Chinese>',
+      '(if errors found) 🔁 Try again: <ask student to repeat the sentence>',
+    ].join('\n');
+
+    try {
+      const result = await llm.chatOnce(translatePrompt);
+      if (!result) return;
+
+      const translationMatch = result.match(/中文翻译[：:]\s*(.+)/);
+      const tipsMatch = result.match(/💡\s*Tips[：:]\s*([\s\S]*?)(?:🔁|$)/);
+      const tryAgainMatch = result.match(/🔁\s*Try again[：:]\s*(.+)/);
+
+      const translation = translationMatch?.[1]?.trim() || '';
+      const tips = tipsMatch?.[1]?.trim() || '';
+      const tryAgain = tryAgainMatch?.[1]?.trim() || '';
+
+      this.send(ws, {
+        type: 'llm_translation',
+        translation: translation || undefined,
+        tips: tips || undefined,
+        tryAgain: tryAgain || undefined,
+      });
+    } catch {
+      // 翻译失败不影响对话
+    }
   }
 
   // ---- LLM 文本 → TTS 语音 ----

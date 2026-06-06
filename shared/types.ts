@@ -25,6 +25,7 @@ export type WSMessage =
   | { type: 'llm_stream'; text: string }
   | {
       type: 'llm_done';
+      text?: string;
       tips?: string;
       tryAgain?: string;
     }
@@ -48,6 +49,14 @@ export type WSMessage =
       fluencyScore: number;
       integrityScore: number;
       weakPhones: string[];
+    }
+
+  // 中文翻译（独立 LLM 调用后返回）
+  | {
+      type: 'llm_translation';
+      translation?: string;
+      tips?: string;
+      tryAgain?: string;
     }
 
   // 打断信号（双向）
@@ -136,7 +145,3 @@ export interface LLMAnalysis {
   improvementTips: string[];
 }
 
-// ---- 共享工具 ----
-
-/** 匹配 LLM 回复末尾的 💡 Tips: ... 段落（前后端共用，避免 DRY） */
-export const TIPS_STRIP_RE = /\n?💡\s*Tips:[\s\S]*$/;

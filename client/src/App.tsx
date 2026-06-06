@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
-import { TIPS_STRIP_RE } from '@shared/types.ts';
 import { TopBar } from './components/TopBar.tsx';
 import { BottomBar } from './components/BottomBar.tsx';
 import { HistoryView } from './components/HistoryView.tsx';
@@ -320,14 +319,10 @@ export function App() {
         setAiCurrent(aiCurrentRef.current);
         break;
       case 'llm_done': {
-        const text = aiCurrentRef.current;
+        // 优先用 llm_done.text（完整英语），兼容旧流式 aiCurrent
+        const text = lastMessage.text?.trim() || aiCurrentRef.current.trim();
         if (text) {
-          const display = text.replace(TIPS_STRIP_RE, '').trim();
-          setTurns((prev) => [...prev, {
-            role: 'ai', text: display,
-            tips: lastMessage.tips,
-            tryAgain: lastMessage.tryAgain,
-          }]);
+          setTurns((prev) => [...prev, { role: 'ai', text }]);
           aiCurrentRef.current = '';
           setAiCurrent('');
         }
@@ -335,6 +330,24 @@ export function App() {
         setInterrupted(false);
         break;
       }
+      case 'llm_translation':
+        setTurns((prev) => {
+          // 找到最后一条 AI 消息，附加翻译和纠错
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'ai') {
+              const copy = [...prev];
+              copy[i] = {
+                ...copy[i],
+                translation: lastMessage.translation,
+                tips: lastMessage.tips,
+                tryAgain: lastMessage.tryAgain,
+              };
+              return copy;
+            }
+          }
+          return prev;
+        });
+        break;
       case 'pronounce_result':
         setTurns((prev) => {
           for (let i = prev.length - 1; i >= 0; i--) {

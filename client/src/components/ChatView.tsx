@@ -33,6 +33,7 @@ export function ChatView(props: Props) {
               )}
             </div>
             <p>{t.text}</p>
+            {t.translation && <p className="ai-translation">{t.translation}</p>}
           </div>
           {t.tips && (
             <div className="correction-card">
