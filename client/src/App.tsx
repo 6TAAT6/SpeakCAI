@@ -152,6 +152,30 @@ export function App() {
     return () => mq.removeEventListener('change', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---- 字体大小 ----
+  type FontSize = 'sm' | 'md' | 'lg';
+  const [fontSize, setFontSize] = useState<FontSize>(() => {
+    const stored = localStorage.getItem('fontSize');
+    return stored === 'md' || stored === 'lg' ? stored : 'sm';
+  });
+  const [showFontMenu, setShowFontMenu] = useState(false);
+  const pickFontSize = (f: FontSize) => {
+    document.documentElement.setAttribute('data-font-size', f);
+    localStorage.setItem('fontSize', f);
+    setFontSize(f);
+    setShowFontMenu(false);
+  };
+  useEffect(() => {
+    document.documentElement.setAttribute('data-font-size', fontSize);
+  }, [fontSize]);
+  useEffect(() => {
+    if (!showFontMenu) return;
+    const close = () => setShowFontMenu(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showFontMenu]);
+
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -433,6 +457,20 @@ export function App() {
           <button onClick={openHistory} className="theme-btn" title="历史记录">
             📋
           </button>
+          <div className="font-size-wrap">
+            <button onClick={(e) => { e.stopPropagation(); setShowFontMenu(!showFontMenu); }} className="theme-btn" title={`字体: ${fontSize === 'sm' ? '小' : fontSize === 'md' ? '中' : '大'}`}>
+              Aa
+            </button>
+            {showFontMenu && (
+              <div className="font-size-menu">
+                {(Object.entries({ sm: '小', md: '中', lg: '大' }) as [FontSize, string][]).map(([f, label]) => (
+                  <button key={f} onClick={() => pickFontSize(f)} className={`font-size-opt ${fontSize === f ? 'active' : ''}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button onClick={cycleTheme} className="theme-btn" title={`主题: ${theme}`}>
             {theme === 'auto' ? '🌓' : theme === 'dark' ? '🌙' : '☀️'}
           </button>
