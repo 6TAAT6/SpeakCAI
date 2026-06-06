@@ -8,6 +8,59 @@ interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: n
 
 type Theme = 'auto' | 'dark' | 'light';
 
+const sceneEmoji: Record<string, string> = { interview: '💼', ordering: '🍽️', meeting: '📊' };
+const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '教练', strict: '📏' };
+const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练', strict: '严师' };
+
+/** LLM 定性分析渲染组件，聊天报告和历史详情复用 */
+function ReportAnalysis({ analysis }: { analysis: LLMAnalysis }) {
+  return (
+    <>
+      <section className="report-section">
+        <h4>🏆 综合评级</h4>
+        <div className="report-level-badge">{analysis.overallLevel}</div>
+      </section>
+      {analysis.grammarErrors.length > 0 && (
+        <section className="report-section">
+          <h4>✏️ 语法/表达错误 ({analysis.grammarErrors.length})</h4>
+          {analysis.grammarErrors.map((err, i) => (
+            <div key={i} className="report-error-item">
+              <div className="report-error-top">
+                <span className="report-error-original">{err.original}</span>
+                <span className="report-error-arrow">→</span>
+                <span className="report-error-corrected">{err.corrected}</span>
+                <span className="report-error-type">{err.errorType}</span>
+              </div>
+              <div className="report-error-explain">{err.explanationShort}</div>
+            </div>
+          ))}
+        </section>
+      )}
+      {analysis.expressionUpgrades.length > 0 && (
+        <section className="report-section">
+          <h4>💡 表达升级 ({analysis.expressionUpgrades.length})</h4>
+          {analysis.expressionUpgrades.map((up, i) => (
+            <div key={i} className="report-upgrade-item">
+              <div className="report-upgrade-top">
+                <span className="report-upgrade-original">{up.original}</span>
+                <span className="report-error-arrow">→</span>
+                <span className="report-upgrade-suggestion">{up.suggestion}</span>
+              </div>
+              <div className="report-upgrade-reason">{up.reason}</div>
+            </div>
+          ))}
+        </section>
+      )}
+      <section className="report-section">
+        <h4>🎯 改进建议</h4>
+        <ul className="report-tips-list">
+          {analysis.improvementTips.map((tip, i) => <li key={i}>{tip}</li>)}
+        </ul>
+      </section>
+    </>
+  );
+}
+
 function loadTheme(): Theme {
   const stored = localStorage.getItem('theme');
   if (stored === 'dark' || stored === 'light' || stored === 'auto') return stored;
@@ -28,9 +81,10 @@ export function App() {
 
   // ---- 页面视图 ----
   const [view, setView] = useState<'chat' | 'history'>('chat');
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // ---- 对话历史 ----
-  interface Session { session_id: string; scene: string; mode: string; created_at: string; ended_at: string | null }
+  interface Session { session_id: string; scene: string; mode: string; created_at: string; ended_at: string | null; report_json?: string; has_report?: number }
   interface TurnRow { id: number; session_id: string; role: string; text: string; created_at: string }
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
@@ -50,6 +104,9 @@ export function App() {
 
   const viewSession = useCallback(async (sessionId: string) => {
     setSelectedSession(sessionId);
+    setHistReportOpen(false);
+    setHistReport(null);
+    setHistReportError('');
     try {
       const r = await fetch(`/api/sessions/${sessionId}/turns`);
       const data = await r.json();
@@ -120,6 +177,35 @@ export function App() {
   const [reportError, setReportError] = useState('');
   const [convoStartTime, setConvoStartTime] = useState(() => Date.now());
 
+  // ---- 历史报告查看 ----
+  const [histReportOpen, setHistReportOpen] = useState(false);
+  const [histReportLoading, setHistReportLoading] = useState(false);
+  const [histReport, setHistReport] = useState<LLMAnalysis | null>(null);
+  const [histReportError, setHistReportError] = useState('');
+
+  const toggleHistReport = useCallback(async () => {
+    if (histReportOpen) { setHistReportOpen(false); return; }
+    setHistReportOpen(true);
+    if (histReport) return; // already loaded
+    if (!selectedSession) return;
+    setHistReportLoading(true);
+    setHistReportError('');
+    try {
+      const r = await fetch(`/api/sessions/${selectedSession}/report`);
+      if (!r.ok) {
+        if (r.status === 404) { setHistReportError('该会话尚未生成报告，请在对话中点击 📊 按钮生成'); return; }
+        const e = await r.json().catch(() => ({ error: '读取失败' }));
+        setHistReportError(e.error || '读取失败');
+        return;
+      }
+      setHistReport(await r.json());
+    } catch {
+      setHistReportError('网络错误');
+    } finally {
+      setHistReportLoading(false);
+    }
+  }, [histReportOpen, histReport, selectedSession]);
+
   const resetConvoTimer = useCallback(() => setConvoStartTime(Date.now()), []);
 
   const stopAudio = useCallback(() => {
@@ -172,6 +258,9 @@ export function App() {
   useEffect(() => {
     if (!lastMessage) return;
     switch (lastMessage.type) {
+      case 'connected':
+        setSessionId(lastMessage.sessionId);
+        break;
       case 'asr_partial':
         setPartialText(lastMessage.text);
         break;
@@ -318,7 +407,7 @@ export function App() {
       const r = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ turns, scene, mode: correctionMode }),
+        body: JSON.stringify({ sessionId, turns, scene, mode: correctionMode }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({ error: '报告生成失败' }));
@@ -331,7 +420,7 @@ export function App() {
     } finally {
       setReportLoading(false);
     }
-  }, [reportOpen, turns, scene, correctionMode]);
+  }, [reportOpen, sessionId, turns, scene, correctionMode]);
 
   const wsReady = status === 'connected';
   const hasConv = turns.length > 0 || partialText || aiCurrent || aiStreaming;
@@ -371,9 +460,19 @@ export function App() {
             ) : selectedSession ? (
               <div className="history-turns">
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                  <button onClick={() => { setSelectedSession(null); setSessionTurns([]); }} className="ctrl-btn">← 返回</button>
-                  <button onClick={deleteSelectedSession} className="ctrl-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>🗑 删除</button>
+                  <button onClick={() => { setSelectedSession(null); setSessionTurns([]); setHistReportOpen(false); setHistReport(null); }} className="ctrl-btn">← 返回</button>
+                  <button onClick={toggleHistReport} className="ctrl-btn" disabled={histReportLoading}>
+                    {histReportOpen ? '💬 对话' : '📊 学习报告'}
+                  </button>
+                  <button onClick={deleteSelectedSession} className="ctrl-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)', marginLeft: 'auto' }}>🗑 删除</button>
                 </div>
+                {histReportOpen ? (
+                  <div className="report-panel">
+                    {histReportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>加载报告中...</p>}
+                    {histReportError && <p className="error-message">{histReportError}</p>}
+                    {histReport && <ReportAnalysis analysis={histReport} />}
+                  </div>
+                ) : (<>
                 {sessionTurns.map((t) => (
                   <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
                     <div className="bubble-header">
@@ -384,6 +483,7 @@ export function App() {
                   </div>
                 ))}
                 {sessionTurns.length === 0 && <p className="placeholder" style={{ marginTop: '20%' }}>该会话暂无对话记录</p>}
+                </>)}
               </div>
             ) : (
               <div className="history-list">
@@ -397,8 +497,9 @@ export function App() {
                   sessions.map((s) => (
                     <div key={s.session_id} className="history-item" onClick={() => viewSession(s.session_id)}>
                       <div className="history-item-top">
-                        <span className="history-scene">{s.scene === 'interview' ? '💼' : s.scene === 'ordering' ? '🍽️' : '📊'} {s.scene}</span>
-                        <span className="history-mode">{s.mode === 'coach' ? '🎯' : s.mode === 'strict' ? '📏' : '🌊'} {s.mode}</span>
+                        <span className="history-scene">{sceneEmoji[s.scene] || '❓'} {s.scene}</span>
+                        <span className="history-mode">{modeEmoji[s.mode] || '❓'} {s.mode}</span>
+                        {s.has_report ? <span style={{ fontSize: '0.7rem' }} title="已有学习报告">📊</span> : null}
                         <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.created_at.slice(0, 16).replace('T', ' ')}</span>
                         <button onClick={(e) => deleteSessionFromList(e, s.session_id)} className="theme-btn" style={{ fontSize: '0.75rem', width: 24, height: 24 }} title="删除">🗑</button>
                       </div>
@@ -444,7 +545,7 @@ export function App() {
                       </div>
                       <div className="report-stat-card">
                         <div className="report-stat-label">场景 / 模式</div>
-                        <div className="report-stat-value small">{scene === 'interview' ? '💼' : scene === 'ordering' ? '🍽️' : '📊'} {correctionMode === 'coach' ? '教练' : correctionMode === 'strict' ? '严师' : '沉浸'}</div>
+                        <div className="report-stat-value small">{sceneEmoji[scene] || '❓'} {modeLabel[correctionMode] || correctionMode}</div>
                       </div>
                     </div>
                   </div>
@@ -538,53 +639,7 @@ export function App() {
                     })()}
                   </section>
 
-                  {/* ---- LLM 定性分析 ---- */}
-                  <section className="report-section">
-                    <h4>🏆 综合评级</h4>
-                    <div className="report-level-badge">{report.overallLevel}</div>
-                  </section>
-
-                  {report.grammarErrors.length > 0 && (
-                    <section className="report-section">
-                      <h4>✏️ 语法/表达错误 ({report.grammarErrors.length})</h4>
-                      {report.grammarErrors.map((err, i) => (
-                        <div key={i} className="report-error-item">
-                          <div className="report-error-top">
-                            <span className="report-error-original">{err.original}</span>
-                            <span className="report-error-arrow">→</span>
-                            <span className="report-error-corrected">{err.corrected}</span>
-                            <span className="report-error-type">{err.errorType}</span>
-                          </div>
-                          <div className="report-error-explain">{err.explanationShort}</div>
-                        </div>
-                      ))}
-                    </section>
-                  )}
-
-                  {report.expressionUpgrades.length > 0 && (
-                    <section className="report-section">
-                      <h4>💡 表达升级 ({report.expressionUpgrades.length})</h4>
-                      {report.expressionUpgrades.map((up, i) => (
-                        <div key={i} className="report-upgrade-item">
-                          <div className="report-upgrade-top">
-                            <span className="report-upgrade-original">{up.original}</span>
-                            <span className="report-error-arrow">→</span>
-                            <span className="report-upgrade-suggestion">{up.suggestion}</span>
-                          </div>
-                          <div className="report-upgrade-reason">{up.reason}</div>
-                        </div>
-                      ))}
-                    </section>
-                  )}
-
-                  <section className="report-section">
-                    <h4>🎯 改进建议</h4>
-                    <ul className="report-tips-list">
-                      {report.improvementTips.map((tip, i) => (
-                        <li key={i}>{tip}</li>
-                      ))}
-                    </ul>
-                  </section>
+                  <ReportAnalysis analysis={report} />
                 </div>
               )}
             </div>
