@@ -212,15 +212,20 @@ export class WSServer {
           this.send(ws, { type: 'asr_partial', text });
         },
         onFinal: (text: string) => {
-          console.log(`✅ final: "${text}"`);
-          this.send(ws, { type: 'asr_final', text });
-          this.handleUserInput(ws, text);
+          // 清理 ASR 误识别的句首/句尾标点（语音输入不可能有标点）
+          let cleaned = text.replace(/^[.,;:!?'"()\[\]{}，。；：！？、""''（）【】…• ]+/, '').replace(/[.,;:!?'"()\[\]{}，。；：！？、""''（）【】…• ]+$/, '').trim();
+          if (!cleaned) return;
+
+          console.log(`✅ final: "${cleaned}"`);
+
+          this.send(ws, { type: 'asr_final', text: cleaned });
+          this.handleUserInput(ws, cleaned);
           // 当前语音段说完 → 立即异步评测（ISE 独立连接，不阻塞 LLM/TTS）
           const segBuf = this.iseBuffer.get(ws);
-          if (segBuf && segBuf.length > 0 && text) {
+          if (segBuf && segBuf.length > 0) {
             const utteranceAudio = Buffer.concat(segBuf);
             this.iseBuffer.set(ws, []); // 重置，下一句从头累积
-            this.evaluatePronounce(ws, text, utteranceAudio);
+            this.evaluatePronounce(ws, cleaned, utteranceAudio);
           }
         },
         onError: (err: Error) => {
@@ -307,21 +312,31 @@ export class WSServer {
     const mode = session?.correctionMode || 'coach';
 
     const correctionPrompt = mode === 'immersive'
-      ? 'The mode is immersive. Do NOT correct errors, just translate.'
-      : 'If the student made grammar mistakes, add 💡 Tips: and 🔁 Try again: in Chinese. If no mistakes, just translate.';
+      ? 'Do NOT correct any errors. Only translate.'
+      : [
+          'Check if the student made REAL grammar or vocabulary mistakes. Rules:',
+          '- The student speaks via voice recognition, so punctuation and capitalization are NOT errors. Never correct them.',
+          '- ONLY correct real mistakes: wrong verb tense, missing articles, wrong word, unnatural phrasing.',
+          '- If the student asked a question but used a statement tone, you may gently suggest adding question words, but only once per conversation.',
+          '- If there is no real grammar/vocabulary mistake, just output the translation line. Do NOT invent errors.',
+        ].join('\n');
 
     const translatePrompt = [
-      `AI English reply: "${englishText}"`,
-      `Student's last message: "${userText}"`,
+      `Translate this AI reply to natural, everyday Chinese:`,
+      `"${englishText}"`,
       '',
-      'Translate the AI reply to Chinese. Also check if the student made any English errors.',
+      `The student said: "${userText}"`,
+      '',
+      'Rules:',
+      '- Write in plain text. No markdown, no dashes, no special symbols.',
+      '- The translation should sound like how real people talk, not like a textbook.',
       correctionPrompt,
       '',
-      'Output format:',
-      '中文翻译：<translation>',
-      '(if errors found) 💡 Tips: <error explanation in Chinese>',
-      '(if errors found) 🔁 Try again: <ask student to repeat the sentence>',
-    ].join('\n');
+      'Output exactly in this format:',
+      '中文翻译：<natural Chinese translation>',
+      mode !== 'immersive' ? '💡 Tips: <brief Chinese explanation of the error>' : '',
+      mode !== 'immersive' ? '🔁 Try again: <ask student to repeat correctly>' : '',
+    ].filter(Boolean).join('\n');
 
     try {
       const result = await llm.chatOnce(translatePrompt);
