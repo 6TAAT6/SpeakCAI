@@ -6,6 +6,7 @@ import { TopBar } from './components/TopBar.tsx';
 import { BottomBar } from './components/BottomBar.tsx';
 import { HistoryView } from './components/HistoryView.tsx';
 import { ReportView } from './components/ReportView.tsx';
+import { ChatView } from './components/ChatView.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
 
 interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
@@ -461,62 +462,17 @@ export function App() {
               onClose={() => setReportOpen(false)}
               onRegenerate={toggleReport}
             />
-          ) : (<>
-          {!hasConv && !isRecording && !captureError && (
-            <p className="placeholder">{wsReady ? '点击底部按钮开始录音对话' : '正在建立连接...'}</p>
-          )}
-          {captureError && <p className="error-message">{captureError}</p>}
-
-          {/* 已完成对话 — 按时间线交替显示 */}
-          {turns.map((t, i) => (
-            <div key={i}>
-              <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
-                <div className="bubble-header">
-                  <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
-                  {t.score !== undefined && (
-                    <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
-                      {t.score}分
-                    </span>
-                  )}
-                </div>
-                <p>{t.text}</p>
-              </div>
-              {/* 纠错提示卡片 */}
-              {t.tips && (
-                <div className="correction-card">
-                  <div className="correction-header">💡 Tips</div>
-                  <p>{t.tips}</p>
-                  {t.tryAgain && (
-                    <div className="try-again">
-                      🔁 {t.tryAgain}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* 当前正在说的 partial */}
-          {partialText && (
-            <div className="bubble user-bubble partial">
-              <span className="bubble-label">You</span>
-              <p>{partialText}</p>
-            </div>
-          )}
-
-          {/* AI 流式输出中 */}
-          {(aiCurrent || aiStreaming) && (
-            <div className="bubble ai-bubble">
-              <div className="bubble-header">
-                <span className="bubble-label">🤖 AI</span>
-                {aiStreaming && <span className="streaming-dot" />}
-              </div>
-              <p>{aiCurrent || '...'}</p>
-            </div>
-          )}
-
-          <div ref={chatEndRef} />
-          </>)}
+          ) : (<ChatView
+            turns={turns}
+            partialText={partialText}
+            aiCurrent={aiCurrent}
+            aiStreaming={aiStreaming}
+            hasConv={Boolean(hasConv)}
+            isRecording={isRecording}
+            wsReady={wsReady}
+            captureError={captureError}
+            chatEndRef={chatEndRef}
+          />)}
         </>)}
       </main>
 
