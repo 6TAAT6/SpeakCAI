@@ -56,6 +56,28 @@ export function App() {
     } catch { /* ignore */ }
   }, []);
 
+  const deleteSelectedSession = useCallback(async () => {
+    if (!selectedSession || !confirm('确定删除这条对话记录吗？')) return;
+    await fetch(`/api/sessions/${selectedSession}`, { method: 'DELETE' });
+    setSelectedSession(null);
+    setSessionTurns([]);
+    // 刷新列表
+    try {
+      const r = await fetch('/api/sessions');
+      setSessions(await r.json());
+    } catch { /* ignore */ }
+  }, [selectedSession]);
+
+  const deleteSessionFromList = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (!confirm('确定删除这条对话记录吗？')) return;
+    await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    try {
+      const r = await fetch('/api/sessions');
+      setSessions(await r.json());
+    } catch { /* ignore */ }
+  }, []);
+
   // ---- 深色模式 ----
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const cycleTheme = () => {
@@ -304,15 +326,14 @@ export function App() {
       <main className="chat-area">
         {view === 'history' ? (
           <div className="history-panel">
-            <div className="history-header">
-              <button onClick={() => { setView('chat'); setSelectedSession(null); }} className="ctrl-btn">← 返回</button>
-              <h3>对话历史</h3>
-            </div>
             {historyLoading ? (
               <p className="placeholder" style={{ marginTop: '20%' }}>加载中...</p>
             ) : selectedSession ? (
               <div className="history-turns">
-                <button onClick={() => { setSelectedSession(null); setSessionTurns([]); }} className="ctrl-btn" style={{ marginBottom: 8 }}>← 返回列表</button>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <button onClick={() => { setSelectedSession(null); setSessionTurns([]); }} className="ctrl-btn">← 返回</button>
+                  <button onClick={deleteSelectedSession} className="ctrl-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>🗑 删除</button>
+                </div>
                 {sessionTurns.map((t) => (
                   <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
                     <div className="bubble-header">
@@ -326,6 +347,10 @@ export function App() {
               </div>
             ) : (
               <div className="history-list">
+                <div className="history-header">
+                  <button onClick={() => { setView('chat'); setSelectedSession(null); }} className="ctrl-btn">← 返回</button>
+                  <h3>对话历史</h3>
+                </div>
                 {sessions.length === 0 ? (
                   <p className="placeholder" style={{ marginTop: '20%' }}>暂无对话历史，开始一次对话吧</p>
                 ) : (
@@ -335,6 +360,7 @@ export function App() {
                         <span className="history-scene">{s.scene === 'interview' ? '💼' : s.scene === 'ordering' ? '🍽️' : '📊'} {s.scene}</span>
                         <span className="history-mode">{s.mode === 'coach' ? '🎯' : s.mode === 'strict' ? '📏' : '🌊'} {s.mode}</span>
                         <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.created_at.slice(0, 16).replace('T', ' ')}</span>
+                        <button onClick={(e) => deleteSessionFromList(e, s.session_id)} className="theme-btn" style={{ fontSize: '0.75rem', width: 24, height: 24 }} title="删除">🗑</button>
                       </div>
                     </div>
                   ))

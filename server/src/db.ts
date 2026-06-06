@@ -105,6 +105,13 @@ export function endSession(sessionId: string): void {
   d.prepare('UPDATE sessions SET ended_at = datetime(\'now\') WHERE session_id = ?').run(sessionId);
 }
 
+export function deleteSession(sessionId: string): void {
+  const d = getDB();
+  d.prepare('DELETE FROM turns WHERE session_id = ?').run(sessionId);
+  d.prepare('DELETE FROM pronunciations WHERE session_id = ?').run(sessionId);
+  d.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId);
+}
+
 export function getSessions(limit = 50): SessionRow[] {
   const d = getDB();
   return d.prepare('SELECT * FROM sessions WHERE session_id IN (SELECT DISTINCT session_id FROM turns) ORDER BY created_at DESC LIMIT ?').all(limit) as SessionRow[];
