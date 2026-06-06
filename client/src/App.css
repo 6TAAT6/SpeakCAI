@@ -336,6 +336,74 @@ body {
   border-color: var(--danger);
 }
 
+[data-theme="dark"] .history-item {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .history-item:hover {
+  background: #0f172a;
+}
+
+/* ---- 对话历史面板 ---- */
+
+.history-panel {
+  width: 100%;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.history-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.history-item:hover {
+  background: var(--bg);
+}
+
+.history-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-scene {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.history-mode {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.history-turns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ---- 动画 ---- */
 
 @keyframes bubble-in {
