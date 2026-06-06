@@ -5,6 +5,7 @@ import { TIPS_STRIP_RE } from '@shared/types.ts';
 import { ReportAnalysis } from './components/ReportAnalysis.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { BottomBar } from './components/BottomBar.tsx';
+import { HistoryView } from './components/HistoryView.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
 
 interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
@@ -422,63 +423,30 @@ export function App() {
       />
 
       <main className="chat-area">
-        {view === 'history' ? (
-          <div className="history-panel">
-            {historyLoading ? (
-              <p className="placeholder" style={{ marginTop: '20%' }}>加载中...</p>
-            ) : selectedSession ? (
-              <div className="history-turns">
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                  <button onClick={() => { setSelectedSession(null); setSessionTurns([]); setHistReportOpen(false); setHistReport(null); }} className="ctrl-btn">← 返回</button>
-                  <button onClick={toggleHistReport} className="ctrl-btn" disabled={histReportLoading}>
-                    {histReportOpen ? '💬 对话' : '📊 学习报告'}
-                  </button>
-                  <button onClick={deleteSelectedSession} className="ctrl-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)', marginLeft: 'auto' }}>🗑 删除</button>
-                </div>
-                {histReportOpen ? (
-                  <div className="report-panel">
-                    {histReportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>加载报告中...</p>}
-                    {histReportError && <p className="error-message">{histReportError}</p>}
-                    {histReport && <ReportAnalysis analysis={histReport} />}
-                  </div>
-                ) : (<>
-                {sessionTurns.map((t) => (
-                  <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
-                    <div className="bubble-header">
-                      <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
-                      <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{t.created_at}</span>
-                    </div>
-                    <p>{t.text}</p>
-                  </div>
-                ))}
-                {sessionTurns.length === 0 && <p className="placeholder" style={{ marginTop: '20%' }}>该会话暂无对话记录</p>}
-                </>)}
-              </div>
-            ) : (
-              <div className="history-list">
-                <div className="history-header">
-                  <button onClick={() => { setView('chat'); setSelectedSession(null); }} className="ctrl-btn">← 返回</button>
-                  <h3>对话历史</h3>
-                </div>
-                {sessions.length === 0 ? (
-                  <p className="placeholder" style={{ marginTop: '20%' }}>暂无对话历史，开始一次对话吧</p>
-                ) : (
-                  sessions.map((s) => (
-                    <div key={s.session_id} className="history-item" onClick={() => viewSession(s.session_id)}>
-                      <div className="history-item-top">
-                        <span className="history-scene">{sceneEmoji[s.scene] || '❓'} {s.scene}</span>
-                        <span className="history-mode">{modeEmoji[s.mode] || '❓'} {s.mode}</span>
-                        {s.has_report ? <span style={{ fontSize: '0.7rem' }} title="已有学习报告">📊</span> : null}
-                        <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.created_at.slice(0, 16).replace('T', ' ')}</span>
-                        <button onClick={(e) => deleteSessionFromList(e, s.session_id)} className="theme-btn" style={{ fontSize: '0.75rem', width: 24, height: 24 }} title="删除">🗑</button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        ) : (<>
+        {view === 'history' && (
+          <HistoryView
+            sessions={sessions}
+            selectedSession={selectedSession}
+            sessionTurns={sessionTurns}
+            historyLoading={historyLoading}
+            histReportOpen={histReportOpen}
+            histReportLoading={histReportLoading}
+            histReport={histReport}
+            histReportError={histReportError}
+            sceneEmoji={sceneEmoji}
+            modeEmoji={modeEmoji}
+            viewSession={viewSession}
+            deleteSelectedSession={deleteSelectedSession}
+            deleteSessionFromList={deleteSessionFromList}
+            setSelectedSession={setSelectedSession}
+            setSessionTurns={setSessionTurns}
+            setHistReportOpen={setHistReportOpen}
+            setHistReport={setHistReport}
+            setView={setView}
+            toggleHistReport={toggleHistReport}
+          />
+        )}
+        {view !== 'history' && (<>
           {reportOpen ? (
             /* ---- 学习报告面板 ---- */
             <div className="report-panel">
