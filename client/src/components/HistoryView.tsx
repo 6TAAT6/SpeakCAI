@@ -14,6 +14,8 @@ interface Props {
   histReportError: string;
   sceneEmoji: Record<string, string>;
   modeEmoji: Record<string, string>;
+  batchMode: boolean;
+  selectedIds: Set<string>;
   viewSession: (id: string) => void;
   deleteSelectedSession: () => void;
   deleteSessionFromList: (e: React.MouseEvent, id: string) => void;
@@ -23,6 +25,10 @@ interface Props {
   setHistReport: (r: LLMAnalysis | null) => void;
   setView: (v: 'chat' | 'history') => void;
   toggleHistReport: () => void;
+  toggleBatchMode: () => void;
+  toggleSelectId: (id: string) => void;
+  selectAllIds: (ids: string[]) => void;
+  batchDelete: () => void;
 }
 
 export function HistoryView(props: Props) {
@@ -70,20 +76,50 @@ export function HistoryView(props: Props) {
     <div className="history-panel">
       <div className="history-list">
         <div className="history-header">
-          <button onClick={() => { props.setView('chat'); props.setSelectedSession(null); }} className="ctrl-btn">← 返回</button>
+          <button onClick={() => { props.setView('chat'); props.setSelectedSession(null); if (props.batchMode) props.toggleBatchMode(); }} className="ctrl-btn">← 返回</button>
           <h3>对话历史</h3>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button onClick={props.toggleBatchMode} className={`ctrl-btn${props.batchMode ? ' active' : ''}`}>
+              {props.batchMode ? '✕ 取消' : '☑ 批量'}
+            </button>
+          </div>
         </div>
+
+        {props.batchMode && props.sessions.length > 0 && (
+          <div className="batch-toolbar">
+            <label className="batch-select-all">
+              <input type="checkbox" checked={props.selectedIds.size === props.sessions.length && props.sessions.length > 0}
+                onChange={() => props.selectAllIds(props.sessions.map(s => s.session_id))} />
+              全选 ({props.selectedIds.size}/{props.sessions.length})
+            </label>
+            <button onClick={props.batchDelete} className="ctrl-btn" disabled={props.selectedIds.size === 0}
+              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+              🗑 删除选中 ({props.selectedIds.size})
+            </button>
+          </div>
+        )}
+
         {props.sessions.length === 0 ? (
           <p className="placeholder" style={{ marginTop: '20%' }}>暂无对话历史，开始一次对话吧</p>
         ) : (
           props.sessions.map((s) => (
-            <div key={s.session_id} className="history-item" onClick={() => props.viewSession(s.session_id)}>
+            <div key={s.session_id} className={`history-item${props.batchMode && props.selectedIds.has(s.session_id) ? ' batch-selected' : ''}`} onClick={() => {
+              if (props.batchMode) { props.toggleSelectId(s.session_id); } else { props.viewSession(s.session_id); }
+            }}>
               <div className="history-item-top">
+                {props.batchMode && (
+                  <input type="checkbox" checked={props.selectedIds.has(s.session_id)}
+                    onChange={() => props.toggleSelectId(s.session_id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="batch-checkbox" />
+                )}
                 <span className="history-scene">{props.sceneEmoji[s.scene] || '❓'} {s.scene}</span>
                 <span className="history-mode">{props.modeEmoji[s.mode] || '❓'} {s.mode}</span>
                 {s.has_report ? <span style={{ fontSize: '0.7rem' }} title="已有学习报告">📊</span> : null}
                 <span className="history-date" style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.created_at.slice(0, 16).replace('T', ' ')}</span>
-                <button onClick={(e) => props.deleteSessionFromList(e, s.session_id)} className="theme-btn" style={{ fontSize: '0.75rem', width: 24, height: 24 }} title="删除">🗑</button>
+                {!props.batchMode && (
+                  <button onClick={(e) => props.deleteSessionFromList(e, s.session_id)} className="theme-btn" style={{ fontSize: '0.75rem', width: 24, height: 24 }} title="删除">🗑</button>
+                )}
               </div>
             </div>
           ))

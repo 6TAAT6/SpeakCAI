@@ -41,6 +41,8 @@ export function App() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [sessionTurns, setSessionTurns] = useState<TurnRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const openHistory = useCallback(async () => {
     setView('history');
@@ -86,6 +88,42 @@ export function App() {
       setSessions(await r.json());
     } catch { /* ignore */ }
   }, []);
+
+  const toggleBatchMode = useCallback(() => {
+    setBatchMode((prev) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  }, []);
+
+  const toggleSelectId = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllIds = useCallback((allIds: string[]) => {
+    setSelectedIds((prev) => prev.size === allIds.length ? new Set() : new Set(allIds));
+  }, []);
+
+  const batchDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`确定删除选中的 ${ids.length} 条对话记录吗？`)) return;
+    await fetch('/api/sessions/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    setSelectedIds(new Set());
+    setBatchMode(false);
+    try {
+      const r = await fetch('/api/sessions');
+      setSessions(await r.json());
+    } catch { /* ignore */ }
+  }, [selectedIds]);
 
   // ---- 深色模式 ----
   const [theme, setTheme] = useState<Theme>(loadTheme);
@@ -480,6 +518,12 @@ export function App() {
             setHistReport={setHistReport}
             setView={setView}
             toggleHistReport={toggleHistReport}
+            batchMode={batchMode}
+            selectedIds={selectedIds}
+            toggleBatchMode={toggleBatchMode}
+            toggleSelectId={toggleSelectId}
+            selectAllIds={selectAllIds}
+            batchDelete={batchDelete}
           />
         )}
         {view !== 'history' && (<>
