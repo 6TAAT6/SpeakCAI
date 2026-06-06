@@ -1,4 +1,5 @@
 import { ReportAnalysis } from './ReportAnalysis.tsx';
+import './ReportView.css';
 import type { LLMAnalysis } from '@shared/types.ts';
 import type { Turn } from '../types.ts';
 
