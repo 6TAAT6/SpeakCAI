@@ -153,8 +153,9 @@ app.post('/api/report', async (req, res) => {
         messages: [{ role: 'user', content: prompt }],
         stream: false,
         temperature: 0.3,
-        max_tokens: 2048,
+        max_tokens: 4096,
       }),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!resp.ok) {

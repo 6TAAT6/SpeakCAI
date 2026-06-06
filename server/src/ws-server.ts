@@ -230,9 +230,12 @@ export class WSServer {
     }
 
     const buffer = Buffer.from(Int16Array.from(msg.data).buffer);
-    // 缓冲音频帧供发音评测
+    // 缓冲音频帧供发音评测（上限 30 秒 ≈ 120 帧 @256ms）
     const ise = this.iseBuffer.get(ws);
-    if (ise) ise.audio.push(buffer);
+    if (ise) {
+      ise.audio.push(buffer);
+      if (ise.audio.length > 120) ise.audio = ise.audio.slice(-120);
+    }
 
     const pending = this.pendingAudio.get(ws);
     if (pending) {
