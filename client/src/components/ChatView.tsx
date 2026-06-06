@@ -17,7 +17,11 @@ export function ChatView(props: Props) {
   return (
     <>
       {!props.hasConv && !props.isRecording && !props.captureError && (
-        <p className="placeholder">{props.wsReady ? '点击底部按钮开始录音对话' : '正在建立连接...'}</p>
+        <div className="welcome-hero">
+          <div className="welcome-avatar">(¯▿¯)</div>
+          <h2 className="welcome-title">Hi! 我是小T</h2>
+          {!props.wsReady && <p className="welcome-hint">正在建立连接...</p>}
+        </div>
       )}
       {props.captureError && <p className="error-message">{props.captureError}</p>}
 
@@ -55,7 +59,7 @@ export function ChatView(props: Props) {
       {(props.aiCurrent || props.aiStreaming) && (
         <div className="bubble ai-bubble">
           <div className="bubble-header">
-            <span className="bubble-label">🤖 AI</span>
+            <span className="bubble-label">🎤 小T</span>
             {props.aiStreaming && <span className="streaming-dot" />}
           </div>
           <p>{props.aiCurrent || '...'}</p>

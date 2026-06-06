@@ -31,7 +31,7 @@ export function ReportView(props: Props) {
         <button onClick={props.onRegenerate} className="ctrl-btn" disabled={props.reportLoading}>🔄 重新生成</button>
       </div>
 
-      {props.reportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>🧠 AI 正在分析对话...</p>}
+      {props.reportLoading && <p className="placeholder" style={{ marginTop: '20%' }}>📊 小T 正在整理报告...</p>}
       {props.reportError && <p className="error-message">{props.reportError}</p>}
 
       {props.report && (

@@ -64,7 +64,7 @@ export class WSServer {
   // 每个客户端缓冲当前语音段的音频帧，每句说完整即触发评测并重置
   // evaluatePronounce 独立 WebSocket，不阻塞 LLM / TTS 管道
   private iseBuffer: Map<WebSocket, Buffer[]> = new Map();
-  // TTS 播放期间 + 播放后短暂优雅期 ASR 识别视为回声，自动忽略；打断时立即解除
+  // TTS 播放期间屏蔽回声 ASR：合成时设 Infinity，前端播完发 tts_playback_done 解除
   private ttsActiveUntil: Map<WebSocket, number> = new Map();
 
   constructor(private port: number) {}
@@ -121,7 +121,7 @@ export class WSServer {
         this.sessionMap.delete(ws);
         this.llmMap.delete(ws);
         this.ttsMap.get(ws)?.abort();
-        this.ttsActiveUntil.set(ws, Date.now() + 500);
+        this.ttsActiveUntil.delete(ws);
         this.ttsMap.delete(ws);
       });
 
@@ -158,6 +158,10 @@ export class WSServer {
 
       case 'audio_frame':
         this.handleAudioFrame(ws, msg);
+        break;
+
+      case 'tts_playback_done':
+        this.ttsActiveUntil.delete(ws); // 前端播放完成，解除回声屏蔽
         break;
 
       case 'interrupt':
@@ -221,7 +225,7 @@ export class WSServer {
 
           console.log(`✅ final: "${cleaned}"`);
 
-          // TTS 播放期间 + 播放后 500ms 优雅期内忽略回声触发
+          // TTS 播放期间忽略回声（前端播完 + 打断时解除）
           const until = this.ttsActiveUntil.get(ws);
           if (until && Date.now() < until) {
             console.log('  -> TTS 回声，忽略');
@@ -394,11 +398,10 @@ export class WSServer {
         });
       },
       onDone: () => {
-        this.ttsActiveUntil.set(ws, Date.now() + 500);
         this.send(ws, { type: 'tts_done' });
       },
       onError: (err: Error) => {
-        this.ttsActiveUntil.set(ws, Date.now() + 500);
+        this.ttsActiveUntil.delete(ws); // 合成失败，解除屏蔽
         console.error(`⚠️ TTS 错误: ${err.message}`);
       },
     });

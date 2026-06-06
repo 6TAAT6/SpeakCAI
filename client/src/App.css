@@ -97,11 +97,42 @@ body {
   gap: 12px;
 }
 
-.placeholder {
+/* ---- 空闲欢迎页 ---- */
+
+.welcome-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-bottom: 60px;
+  user-select: none;
+}
+
+.welcome-avatar {
+  font-size: 3.5rem;
+  line-height: 1;
+  animation: avatar-breathe 3s ease-in-out infinite;
+}
+
+@keyframes avatar-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.14); }
+}
+
+.welcome-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.welcome-hint {
+  font-size: 0.85rem;
   color: var(--text-muted);
-  text-align: center;
-  margin-top: 40%;
-  font-size: 0.95rem;
+  margin-top: 12px;
+  opacity: 0.7;
 }
 
 .error-message {
