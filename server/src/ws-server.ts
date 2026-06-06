@@ -255,12 +255,31 @@ export class WSServer {
         this.send(ws, { type: 'llm_stream', text: chunk });
       },
       onDone: (fullText: string) => {
-        if (fullText && !aborted) {
-          session.addAssistantMessage(fullText);
+        if (!fullText || aborted) {
+          this.send(ws, { type: 'llm_done' });
+          return;
         }
-        this.send(ws, { type: 'llm_done' });
-        // LLM 回复完成 → 自动触发 TTS 语音合成
-        this.handleTTS(ws, fullText);
+
+        // 解析纠错内容：💡 Tips: ... 和 🔁 Try again: ...
+        const tipsMatch = fullText.match(/💡\s*Tips:\s*([\s\S]*?)(?:🔁\s*Try again:|$)/);
+        const tryAgainMatch = fullText.match(/🔁\s*Try again:\s*([\s\S]*)/);
+        const tips = tipsMatch?.[1]?.trim() || '';
+        const tryAgain = tryAgainMatch?.[1]?.trim() || '';
+
+        // 清洗文本（去掉纠错部分用于 TTS + 会话存储）
+        const cleanText = fullText.replace(/\n?💡\s*Tips:[\s\S]*$/, '').trim();
+
+        session.addAssistantMessage(cleanText);
+
+        // llm_done 附带纠错信息（前端一次性渲染，无时序竞争）
+        this.send(ws, {
+          type: 'llm_done',
+          tips: tips || undefined,
+          tryAgain: tryAgain || undefined,
+        });
+
+        // TTS 用清洗后的文本（不朗读纠错提示）
+        this.handleTTS(ws, cleanText);
       },
       onError: (err: Error) => {
         console.error(`⚠️ LLM 错误: ${err.message}`);
