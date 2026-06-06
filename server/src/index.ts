@@ -10,6 +10,8 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WSServer } from './ws-server.ts';
+import { getSessions, getTurns, deleteSession } from './db.ts';
+import { closeDB } from './db.ts';
 
 const SERVER_PORT = parseInt(process.env.SERVER_PORT || '3000', 10);
 const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
@@ -18,8 +20,6 @@ const WS_PORT = parseInt(process.env.WS_PORT || '3001', 10);
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-import { getSessions, getTurns } from './db.ts';
 
 // 健康检查
 app.get('/api/health', (_req, res) => {
@@ -46,6 +46,16 @@ app.get('/api/sessions/:id/turns', (req, res) => {
   }
 });
 
+// 对话历史 — 删除会话
+app.delete('/api/sessions/:id', (req, res) => {
+  try {
+    deleteSession(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: '删除失败' });
+  }
+});
+
 // 启动 HTTP
 const httpServer = createServer(app);
 httpServer.listen(SERVER_PORT, () => {
@@ -60,6 +70,7 @@ wsServer.start();
 const shutdown = () => {
   console.log('\n🛑 正在关闭服务...');
   wsServer.stop();
+  closeDB();
 
   // 等待 HTTP 连接关闭，超时 5 秒后强制退出
   const forceExit = setTimeout(() => {
