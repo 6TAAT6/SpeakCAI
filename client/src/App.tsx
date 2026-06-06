@@ -4,6 +4,7 @@ import { useAudioCapture } from './hooks/useAudioCapture.ts';
 import { TIPS_STRIP_RE } from '@shared/types.ts';
 import { ReportAnalysis } from './components/ReportAnalysis.tsx';
 import { TopBar } from './components/TopBar.tsx';
+import { BottomBar } from './components/BottomBar.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
 
 interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
@@ -661,24 +662,20 @@ export function App() {
       </main>
 
       {view === 'chat' && (
-        <footer className="bottom-bar">
-          {isRecording && (
-            <span className="record-timer">● {frameCount > 0 ? Math.round((frameCount * 256) / 1000) : 0}s</span>
-          )}
-          <button onClick={handleRecordToggle} disabled={!wsReady} className={`record-btn ${isRecording ? 'recording' : ''}`}>
-            {isRecording ? '⏹ 停止' : '🎤 开始对话'}
-          </button>
-          {turns.length > 0 && (
-          <button onClick={toggleReport} className={`ctrl-btn ${reportOpen ? 'active' : ''}`}>
-            {reportOpen ? '💬 对话' : '📊 报告'}
-          </button>
-          )}
-          {(turns.length > 0 || aiCurrent || aiStreaming || ttsPlaying || interrupted) && (
-          <button onClick={handleInterruptToggle} className="ctrl-btn">
-            {interrupted ? '▶ 继续' : '⏹ 打断'}
-          </button>
-          )}
-        </footer>
+        <BottomBar
+          isRecording={isRecording}
+          frameCount={frameCount}
+          wsReady={wsReady}
+          turnsLen={turns.length}
+          reportOpen={reportOpen}
+          interrupted={interrupted}
+          aiCurrent={aiCurrent}
+          aiStreaming={aiStreaming}
+          ttsPlaying={ttsPlaying}
+          handleRecordToggle={handleRecordToggle}
+          toggleReport={toggleReport}
+          handleInterruptToggle={handleInterruptToggle}
+        />
       )}
     </div>
   );
