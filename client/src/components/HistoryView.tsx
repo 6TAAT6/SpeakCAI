@@ -1,9 +1,7 @@
 import React from 'react';
 import { ReportAnalysis } from './ReportAnalysis.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
-
-interface Session { session_id: string; scene: string; mode: string; created_at: string; ended_at: string | null; has_report?: number }
-interface TurnRow { id: number; session_id: string; role: string; text: string; created_at: string }
+import type { Session, TurnRow } from '../types.ts';
 
 interface Props {
   sessions: Session[];

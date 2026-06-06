@@ -1,7 +1,6 @@
 import { ReportAnalysis } from './ReportAnalysis.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
-
-interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
+import type { Turn } from '../types.ts';
 
 interface Props {
   turns: Turn[];

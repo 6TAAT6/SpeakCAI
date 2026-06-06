@@ -4,17 +4,14 @@ interface Props {
   wsReady: boolean;
   turnsLen: number;
   reportOpen: boolean;
+  showInterrupt: boolean;
   interrupted: boolean;
-  aiCurrent: string;
-  aiStreaming: boolean;
-  ttsPlaying: boolean;
   handleRecordToggle: () => void;
   toggleReport: () => void;
   handleInterruptToggle: () => void;
 }
 
 export function BottomBar(props: Props) {
-  const showInterrupt = props.turnsLen > 0 || props.aiCurrent || props.aiStreaming || props.ttsPlaying || props.interrupted;
   return (
     <footer className="bottom-bar">
       {props.isRecording && (
@@ -28,7 +25,7 @@ export function BottomBar(props: Props) {
           {props.reportOpen ? '💬 对话' : '📊 报告'}
         </button>
       )}
-      {showInterrupt && (
+      {props.showInterrupt && (
         <button onClick={props.handleInterruptToggle} className="ctrl-btn">
           {props.interrupted ? '▶ 继续' : '⏹ 打断'}
         </button>

@@ -1,6 +1,5 @@
 import React from 'react';
-
-interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; tips?: string; tryAgain?: string }
+import type { Turn } from '../types.ts';
 
 interface Props {
   turns: Turn[];
