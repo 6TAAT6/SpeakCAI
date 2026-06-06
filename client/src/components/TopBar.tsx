@@ -1,7 +1,5 @@
 import type { Scene, CorrectionMode } from '@shared/types.ts';
-
-type FontSize = 'sm' | 'md' | 'lg';
-type Theme = 'auto' | 'dark' | 'light';
+import type { FontSize, Theme } from '../types.ts';
 
 interface Props {
   openHistory: () => void;

@@ -8,10 +8,7 @@ import { HistoryView } from './components/HistoryView.tsx';
 import { ReportView } from './components/ReportView.tsx';
 import { ChatView } from './components/ChatView.tsx';
 import type { LLMAnalysis } from '@shared/types.ts';
-
-interface Turn { role: 'user' | 'ai'; text: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
-
-type Theme = 'auto' | 'dark' | 'light';
+import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
 
 const sceneEmoji: Record<string, string> = { interview: '💼', ordering: '🍽️', meeting: '📊' };
 const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '🎯', strict: '📏' };
@@ -40,8 +37,6 @@ export function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   // ---- 对话历史 ----
-  interface Session { session_id: string; scene: string; mode: string; created_at: string; ended_at: string | null; report_json?: string; has_report?: number }
-  interface TurnRow { id: number; session_id: string; role: string; text: string; created_at: string }
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [sessionTurns, setSessionTurns] = useState<TurnRow[]>([]);
@@ -110,7 +105,6 @@ export function App() {
   }, []);
 
   // ---- 字体大小 ----
-  type FontSize = 'sm' | 'md' | 'lg';
   const [fontSize, setFontSize] = useState<FontSize>(() => {
     const stored = localStorage.getItem('fontSize');
     return stored === 'md' || stored === 'lg' ? stored : 'sm';
@@ -483,10 +477,8 @@ export function App() {
           wsReady={wsReady}
           turnsLen={turns.length}
           reportOpen={reportOpen}
+          showInterrupt={turns.length > 0 || Boolean(aiCurrent) || aiStreaming || ttsPlaying || interrupted}
           interrupted={interrupted}
-          aiCurrent={aiCurrent}
-          aiStreaming={aiStreaming}
-          ttsPlaying={ttsPlaying}
           handleRecordToggle={handleRecordToggle}
           toggleReport={toggleReport}
           handleInterruptToggle={handleInterruptToggle}
