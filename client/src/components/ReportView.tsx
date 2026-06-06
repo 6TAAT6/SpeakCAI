@@ -81,29 +81,74 @@ export function ReportView(props: Props) {
           <section className="report-section">
             <h4>🎯 能力雷达图</h4>
             {userTurns.length === 0 ? <p className="report-empty">暂无发音数据</p> : (() => {
-              const acc = { val: Math.min(avg('accuracy') / 100, 1), label: '准确度', color: 'var(--accent)' };
-              const flu = { val: Math.min(avg('fluency') / 100, 1), label: '流利度', color: 'var(--success)' };
-              const itg = { val: Math.min(avg('integrity') / 100, 1), label: '完整度', color: 'var(--warning)' };
-              const tot = { val: Math.min((userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length) / 100, 1), label: '总分', color: 'var(--text)' };
-              const dims = [acc, flu, itg, tot];
-              const angles = [Math.PI / 2, 0, -Math.PI / 2, Math.PI];
-              const r = 50, cx = 60, cy = 60;
-              const px = (v: number, a: number) => `${cx + Math.cos(a) * r * v},${cy - Math.sin(a) * r * v}`;
-              const pts = dims.map((d, i) => px(d.val, angles[i])).join(' ');
+              const acc = avg('accuracy');
+              const flu = avg('fluency');
+              const itg = avg('integrity');
+              const tot = userTurns.length > 0
+                ? userTurns.reduce((s, t) => s + (t.score ?? 0), 0) / userTurns.length
+                : 0;
+              const dims = [
+                { label: '准确度', val: acc, color: '#3b82f6', angle: -Math.PI / 2 },
+                { label: '流利度', val: flu, color: '#22c55e', angle: 0 },
+                { label: '完整度', val: itg, color: '#f59e0b', angle: Math.PI / 2 },
+                { label: '总分',    val: tot, color: '#ec4899', angle: Math.PI },
+              ];
+              const r = 78, cx = 115, cy = 115;
+              const p = (v: number, a: number) =>
+                `${cx + Math.cos(a) * r * (v / 100)},${cy + Math.sin(a) * r * (v / 100)}`;
+              const levels = [0.2, 0.4, 0.6, 0.8, 1.0];
               return (
-                <div className="report-radar">
-                  <svg viewBox="0 0 120 120" className="radar-svg">
-                    {[0.25, 0.5, 0.75, 1].map(s => (
-                      <polygon key={s} points={angles.map(a => px(s, a)).join(' ')} fill="none" stroke="var(--border)" strokeWidth="0.5" />
+                <div className="report-radar-wrap">
+                  <svg viewBox="0 0 230 230" className="radar-svg">
+                    <defs>
+                      <radialGradient id="radarGrad" cx="50%" cy="50%">
+                        <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.05" />
+                      </radialGradient>
+                    </defs>
+                    {levels.map(lv => (
+                      <polygon key={lv} points={dims.map(d => p(lv * 100, d.angle)).join(' ')}
+                        fill="none" stroke="var(--border)" strokeWidth="1" strokeDasharray={lv === 1 ? '0' : '3 2'} />
                     ))}
-                    {angles.map(a => (
-                      <line key={a} x1={cx} y1={cy} x2={cx + Math.cos(a) * r} y2={cy - Math.sin(a) * r} stroke="var(--border)" strokeWidth="0.5" />
+                    {dims.map(d => (
+                      <line key={d.label} x1={cx} y1={cy}
+                        x2={cx + Math.cos(d.angle) * r} y2={cy + Math.sin(d.angle) * r}
+                        stroke="var(--border)" strokeWidth="1" />
                     ))}
-                    <polygon points={pts} fill="var(--accent)" fillOpacity="0.25" stroke="var(--accent)" strokeWidth="1.5" />
+                    <polygon points={dims.map(d => p(d.val, d.angle)).join(' ')}
+                      fill="url(#radarGrad)" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
+                    {dims.map(d => {
+                      const [dotX, dotY] = p(d.val, d.angle).split(',');
+                      return (
+                        <circle key={d.label} cx={dotX} cy={dotY} r="4" fill={d.color} stroke="#fff" strokeWidth="1.5" />
+                      );
+                    })}
+                    {dims.map(d => {
+                      const lr = r + 22;
+                      const lx = cx + Math.cos(d.angle) * lr;
+                      const ly = cy + Math.sin(d.angle) * lr;
+                      return (
+                        <text key={d.label} x={lx} y={ly} textAnchor="middle" dominantBaseline="central"
+                          fill={d.color} fontSize="12" fontWeight="600">{d.label}</text>
+                      );
+                    })}
+                    {dims.map(d => {
+                      const mr = r * 0.55;
+                      const mx = cx + Math.cos(d.angle) * mr;
+                      const my = cy + Math.sin(d.angle) * mr;
+                      return (
+                        <text key={d.label + '-val'} x={mx} y={my} textAnchor="middle" dominantBaseline="central"
+                          fill={d.color} fontSize="10" fontWeight="700" opacity="0.85">{Math.round(d.val)}</text>
+                      );
+                    })}
                   </svg>
-                  <div className="radar-labels">
-                    {dims.map((d, i) => (
-                      <span key={i} style={{ color: d.color }}>{d.label} {Math.round(d.val * 100)}</span>
+                  <div className="radar-legend">
+                    {dims.map(d => (
+                      <div key={d.label} className="radar-legend-item">
+                        <span className="radar-legend-dot" style={{ background: d.color }} />
+                        <span className="radar-legend-label">{d.label}</span>
+                        <span className="radar-legend-val">{Math.round(d.val)}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
