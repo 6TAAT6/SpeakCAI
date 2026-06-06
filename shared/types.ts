@@ -103,6 +103,7 @@ export interface LessonReport {
 
 /** 前端发送给后端报告 API 的请求体 */
 export interface ReportRequest {
+  sessionId?: string;
   turns: Array<{
     role: 'user' | 'ai';
     text: string;

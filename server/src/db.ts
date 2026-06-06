@@ -48,6 +48,7 @@ export interface SessionRow {
   mode: string;
   created_at: string;
   ended_at: string | null;
+  has_report?: number;
 }
 
 export interface TurnRow {
@@ -78,9 +79,18 @@ export function getDB(): Database.Database {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.exec(SCHEMA);
+    migrate(db);
     console.log(`🗄️  SQLite 已就绪 → ${DB_PATH}`);
   }
   return db;
+}
+
+/** 幂等迁移：补上新增的列 */
+function migrate(d: Database.Database): void {
+  const cols = (d.pragma('table_info(sessions)') as Array<{ name: string }>).map(c => c.name);
+  if (!cols.includes('report_json')) {
+    d.exec('ALTER TABLE sessions ADD COLUMN report_json TEXT');
+  }
 }
 
 export function closeDB(): void {
@@ -114,7 +124,7 @@ export function deleteSession(sessionId: string): void {
 
 export function getSessions(limit = 50): SessionRow[] {
   const d = getDB();
-  return d.prepare('SELECT * FROM sessions WHERE session_id IN (SELECT DISTINCT session_id FROM turns) ORDER BY created_at DESC LIMIT ?').all(limit) as SessionRow[];
+  return d.prepare('SELECT *, report_json IS NOT NULL as has_report FROM sessions WHERE session_id IN (SELECT DISTINCT session_id FROM turns) ORDER BY created_at DESC LIMIT ?').all(limit) as SessionRow[];
 }
 
 // ---- Turn CRUD ----
@@ -146,4 +156,17 @@ export function addPronunciation(
 export function getPronunciations(sessionId: string): PronunciationRow[] {
   const d = getDB();
   return d.prepare('SELECT * FROM pronunciations WHERE session_id = ? ORDER BY id').all(sessionId) as PronunciationRow[];
+}
+
+// ---- Report CRUD ----
+
+export function saveReport(sessionId: string, reportJson: string): void {
+  const d = getDB();
+  d.prepare('UPDATE sessions SET report_json = ? WHERE session_id = ?').run(reportJson, sessionId);
+}
+
+export function getReport(sessionId: string): string | null {
+  const d = getDB();
+  const row = d.prepare('SELECT report_json FROM sessions WHERE session_id = ?').get(sessionId) as { report_json: string | null } | undefined;
+  return row?.report_json || null;
 }

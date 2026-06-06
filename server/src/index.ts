@@ -10,7 +10,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WSServer } from './ws-server.ts';
-import { getSessions, getTurns, deleteSession } from './db.ts';
+import { getSessions, getTurns, deleteSession, saveReport, getReport } from './db.ts';
 import { closeDB } from './db.ts';
 import type { ReportRequest, LLMAnalysis } from '../../shared/types.ts';
 
@@ -171,20 +171,38 @@ app.post('/api/report', async (req, res) => {
 
     try {
       const analysis = parseReportJSON(content);
+      // 关联 sessionId，自动存库
+      if (body.sessionId) {
+        saveReport(body.sessionId, JSON.stringify(analysis));
+      }
       res.json(analysis);
     } catch {
       console.error('❌ 报告 JSON 解析失败, 原始内容:', content.slice(0, 500));
-      // 兜底：返回原始文本作为 improvementTips
-      res.json({
+      const fallback: LLMAnalysis = {
         overallLevel: '无法评估',
         grammarErrors: [],
         expressionUpgrades: [],
         improvementTips: [content.slice(0, 200)],
-      } as LLMAnalysis);
+      };
+      if (body.sessionId) {
+        saveReport(body.sessionId, JSON.stringify(fallback));
+      }
+      res.json(fallback);
     }
   } catch (e: any) {
     console.error('❌ 报告 API 异常:', e.message);
     res.status(500).json({ error: `报告生成失败: ${e.message}` });
+  }
+});
+
+// GET /api/sessions/:id/report — 获取已有报告
+app.get('/api/sessions/:id/report', (req, res) => {
+  try {
+    const json = getReport(req.params.id);
+    if (!json) return res.status(404).json({ error: '暂无报告' });
+    res.json(JSON.parse(json));
+  } catch {
+    res.status(500).json({ error: '读取报告失败' });
   }
 });
 
