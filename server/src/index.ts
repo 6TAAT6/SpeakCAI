@@ -10,7 +10,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WSServer } from './ws-server.ts';
-import { getSessions, getTurns, deleteSession, saveReport, getReport } from './db.ts';
+import { getSessions, getTurns, deleteSession, saveReport, getReport, getProgress } from './db.ts';
 import { closeDB } from './db.ts';
 import type { ReportRequest, LLMAnalysis } from '../../shared/types.ts';
 
@@ -218,6 +218,15 @@ app.get('/api/sessions/:id/report', (req, res) => {
     res.json(JSON.parse(json));
   } catch {
     res.status(500).json({ error: '读取报告失败' });
+  }
+});
+
+// GET /api/progress — 成长曲线聚合数据
+app.get('/api/progress', (_req, res) => {
+  try {
+    res.json(getProgress());
+  } catch (e) {
+    res.status(500).json({ error: '查询失败' });
   }
 });
 

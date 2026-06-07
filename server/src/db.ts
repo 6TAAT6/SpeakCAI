@@ -177,3 +177,49 @@ export function getReport(sessionId: string): string | null {
   const row = d.prepare('SELECT report_json FROM sessions WHERE session_id = ?').get(sessionId) as { report_json: string | null } | undefined;
   return row?.report_json || null;
 }
+
+// ---- 成长曲线聚合 ----
+export interface ProgressSession {
+  session_id: string;
+  date: string;
+  scene: string;
+  mode: string;
+  turn_count: number;
+  avg_score: number;
+  avg_accuracy: number;
+  avg_fluency: number;
+  avg_integrity: number;
+}
+
+export interface ProgressData {
+  sessions: ProgressSession[];
+  weakPhonemes: Array<{ phoneme: string; count: number }>;
+}
+
+export function getProgress(): ProgressData {
+  const d = getDB();
+  // 按 session 聚合发音评测数据
+  const rows = d.prepare(`
+    SELECT
+      s.session_id,
+      s.created_at AS date,
+      s.scene,
+      s.mode,
+      COUNT(t.id) AS turn_count,
+      ROUND(AVG(p.total_score), 1) AS avg_score,
+      ROUND(AVG(p.accuracy_score), 1) AS avg_accuracy,
+      ROUND(AVG(p.fluency_score), 1) AS avg_fluency,
+      ROUND(AVG(p.integrity_score), 1) AS avg_integrity
+    FROM sessions s
+    LEFT JOIN turns t ON t.session_id = s.session_id AND t.role = 'user'
+    LEFT JOIN pronunciations p ON p.session_id = s.session_id
+    WHERE p.total_score > 0
+    GROUP BY s.session_id
+    ORDER BY s.created_at ASC
+  `).all() as ProgressSession[];
+
+  // 弱音素无法从 DB 聚合（未持久化），返回空数组占位
+  const weakPhonemes: Array<{ phoneme: string; count: number }> = [];
+
+  return { sessions: rows, weakPhonemes };
+}
