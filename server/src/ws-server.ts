@@ -203,6 +203,10 @@ export class WSServer {
         this.handleConfigUpdate(ws, msg);
         break;
 
+      case 'new_session':
+        this.handleNewSession(ws, msg);
+        break;
+
       case 'continue_session':
         this.handleContinueSession(ws, msg);
         break;
@@ -517,6 +521,37 @@ export class WSServer {
         `⚙️  场景: ${msg.payload.scene}, 纠错: ${msg.payload.correctionMode}`,
       );
     }
+  }
+
+  // ---- 新建会话 ----
+  private handleNewSession(
+    ws: WebSocket,
+    msg: Extract<WSMessage, { type: 'new_session' }>,
+  ): void {
+    const oldSession = this.sessionMap.get(ws);
+    // 结束旧会话的 DB 记录
+    if (oldSession) {
+      endSession(oldSession.sessionId);
+    }
+
+    // 创建新会话
+    const sessionId = uuidv4();
+    const session = new ConversationSession(sessionId, msg.scene, msg.correctionMode);
+    this.sessionMap.set(ws, session);
+
+    // 更新客户端映射
+    const client = this.clients.get(ws);
+    if (client) client.sessionId = sessionId;
+
+    // 持久化
+    createSession(sessionId, msg.scene, msg.correctionMode);
+
+    // 通知前端新 session ID
+    this.send(ws, { type: 'connected', sessionId });
+
+    console.log(
+      `🆕 新会话: ${sessionId.slice(0, 8)} 场景: ${msg.scene}, 纠错: ${msg.correctionMode}`,
+    );
   }
 
   // ---- 继续历史会话 ----

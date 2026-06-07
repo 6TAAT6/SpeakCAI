@@ -13,6 +13,7 @@ export type WSMessage =
   | { type: 'ping' }
   | { type: 'pong' }
   | { type: 'connected'; sessionId: string }
+  | { type: 'new_session'; scene: Scene; correctionMode: CorrectionMode }
 
   // 音频流（浏览器 → 后端）
   | { type: 'audio_frame'; data: number[]; seq: number }
