@@ -11,6 +11,7 @@ import { ReportView } from './components/ReportView.tsx';
 import { ProgressView } from './components/ProgressView.tsx';
 import type { LLMAnalysis, Scene, CorrectionMode, ProgressData } from '@shared/types.ts';
 import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
+import { uint8ArrayToBase64, base64ToUint8Array } from './utils/binary.ts';
 
 const sceneEmoji: Record<string, string> = { daily: '💬', interview: '💼', ordering: '🍽️', meeting: '📊', travel: '✈️', shopping: '🛍️', hotel: '🏨' };
 const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练' };
@@ -450,7 +451,7 @@ export function App() {
     replaySourceRef.current = null;
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
-    const raw = new Uint8Array(atob(audioBase64).split('').map((c) => c.charCodeAt(0)));
+    const raw = base64ToUint8Array(audioBase64);
     const samples = new Int16Array(raw.buffer);
     const float32 = new Float32Array(samples.length);
     for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768;
@@ -548,9 +549,7 @@ export function App() {
           audioChunksRef.current = [];
           stopAudio();
         }
-        audioChunksRef.current.push(
-          new Uint8Array(atob(lastMessage.data).split('').map((c) => c.charCodeAt(0))),
-        );
+        audioChunksRef.current.push(base64ToUint8Array(lastMessage.data));
         break;
       case 'tts_done': {
         const chunks = audioChunksRef.current;
@@ -562,7 +561,7 @@ export function App() {
           audioChunksRef.current = [];
           ttsBufferRef.current = merged;
           // 缓存音频到当前 AI turn，供重播使用
-          const audioBase64 = btoa(String.fromCharCode(...merged));
+          const audioBase64 = uint8ArrayToBase64(merged);
           setTurns((prev) => {
             for (let i = prev.length - 1; i >= 0; i--) {
               if (prev[i].role === 'ai') {
