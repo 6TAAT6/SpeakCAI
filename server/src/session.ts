@@ -7,7 +7,7 @@ export interface ChatMessage {
 }
 
 export class ConversationSession {
-  readonly sessionId: string;
+  sessionId: string;
   readonly createdAt: Date;
   scene: Scene;
   correctionMode: CorrectionMode;

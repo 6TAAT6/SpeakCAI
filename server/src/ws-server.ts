@@ -495,6 +495,10 @@ export class WSServer {
     const session = this.sessionMap.get(ws);
     if (!session) return;
 
+    // 将会话 ID 切换到历史会话，确保后续 addTurn 写入正确 session
+    session.sessionId = msg.sessionId;
+    const client = this.clients.get(ws);
+    if (client) client.sessionId = msg.sessionId;
     session.setConfig(msg.scene, msg.correctionMode);
     for (const t of msg.turns) {
       if (t.role === 'user') {
