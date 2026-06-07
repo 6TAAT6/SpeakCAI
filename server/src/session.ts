@@ -28,7 +28,9 @@ export class ConversationSession {
   setConfig(scene: Scene, correctionMode: CorrectionMode): void {
     this.scene = scene;
     this.correctionMode = correctionMode;
-    this.messages = [this.makeSystem(scene, correctionMode)];
+    // 只更新 system prompt，保留已有对话上下文
+    const userMsgs = this.messages.filter((m) => m.role !== 'system');
+    this.messages = [this.makeSystem(scene, correctionMode), ...userMsgs];
   }
 
   addUserMessage(text: string): void {
