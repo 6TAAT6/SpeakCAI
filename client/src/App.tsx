@@ -72,8 +72,8 @@ export function App() {
     ttsBufferRef.current = null;
     playbackOffsetRef.current = 0;
     stopAudio();
-    // 通知后端重置会话上下文，避免新对话带上旧历史
-    messagesRef.current.send({ type: 'config_update', payload: { scene, correctionMode } });
+    // 通知后端创建全新会话
+    messagesRef.current.send({ type: 'new_session', scene: sceneRef.current, correctionMode: correctionModeRef.current });
   }, []);
 
   /** 刷新侧边栏历史列表 */
@@ -400,6 +400,10 @@ export function App() {
   // ---- 场景 + 纠错模式 ----
   const [scene, setScene] = useState<Scene>('daily');
   const [correctionMode, setCorrectionMode] = useState<CorrectionMode>('coach');
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const correctionModeRef = useRef(correctionMode);
+  correctionModeRef.current = correctionMode;
 
   const updateConfig = useCallback((s: typeof scene, m: typeof correctionMode) => {
     setScene(s);
