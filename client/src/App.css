@@ -583,6 +583,32 @@ body {
   margin-bottom: 4px;
 }
 
+.replay-btn {
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s, border-color 0.15s;
+}
+.replay-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.replay-btn.playing {
+  color: var(--accent);
+  border-color: var(--accent);
+  animation: replay-pulse 1s ease-in-out infinite;
+}
+
+@keyframes replay-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .user-bubble {
   align-self: flex-end;
   background: var(--user-blue);

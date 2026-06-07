@@ -295,6 +295,8 @@ export function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
+  const replaySourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const [replayIndex, setReplayIndex] = useState<number | null>(null);
 
   // ---- 学习报告 ----
   const [reportOpen, setReportOpen] = useState(false);
@@ -421,6 +423,27 @@ export function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** 重播缓存的 AI 语音 */
+  const handleReplayTurn = useCallback((audioBase64: string, index: number) => {
+    try { replaySourceRef.current?.stop(); } catch { /* noop */ }
+    replaySourceRef.current = null;
+    const ctx = audioCtxRef.current || new AudioContext();
+    audioCtxRef.current = ctx;
+    const raw = new Uint8Array(atob(audioBase64).split('').map((c) => c.charCodeAt(0)));
+    const samples = new Int16Array(raw.buffer);
+    const float32 = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768;
+    const buffer = ctx.createBuffer(1, samples.length, 16000);
+    buffer.copyToChannel(float32, 0);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    replaySourceRef.current = source;
+    setReplayIndex(index);
+    source.onended = () => { replaySourceRef.current = null; setReplayIndex(null); };
+    source.start();
+  }, []);
+
   // ---- 自动滚动 ----
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -517,6 +540,18 @@ export function App() {
           for (const c of chunks) { merged.set(c, offset); offset += c.length; }
           audioChunksRef.current = [];
           ttsBufferRef.current = merged;
+          // 缓存音频到当前 AI turn，供重播使用
+          const audioBase64 = btoa(String.fromCharCode(...merged));
+          setTurns((prev) => {
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].role === 'ai') {
+                const copy = [...prev];
+                copy[i] = { ...copy[i], audio: audioBase64 };
+                return copy;
+              }
+            }
+            return prev;
+          });
           playPCM(merged);
         }
         break;
@@ -729,6 +764,8 @@ export function App() {
                   wsReady={wsReady}
                   captureError={captureError}
                   chatEndRef={chatEndRef}
+                  onReplayTurn={handleReplayTurn}
+                  replayIndex={replayIndex}
                 />
               )}
             </>)}
