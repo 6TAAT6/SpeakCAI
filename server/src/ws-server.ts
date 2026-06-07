@@ -29,7 +29,7 @@ const getTTSConfig = (): TTSConfig => ({
   apiKey: process.env.XUNFEI_API_KEY || '',
   apiSecret: process.env.XUNFEI_API_SECRET || '',
   voiceName: 'catherine', // 英文女声-Catherine
-  speed: 50,
+  speed: 65,
 });
 
 const getISEConfig = (): ISEConfig => ({
