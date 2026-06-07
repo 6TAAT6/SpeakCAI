@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import type { WSMessage } from '../../shared/types.ts';
+import type { WSMessage, CorrectionMode } from '../../shared/types.ts';
 import { XunfeiASR } from './asr.ts';
 import type { ASRConfig } from './asr.ts';
 import { ConversationSession } from './session.ts';
@@ -345,7 +345,7 @@ export class WSServer {
         this.handleTTS(ws, ttsText);
 
         // Step 2: 异步中文翻译 + 纠错（用完整文本，保证翻译准确）
-        this.handleTranslation(ws, englishText, text);
+        this.handleTranslation(ws, englishText, text, session.correctionMode);
       },
       onError: (err: Error) => {
         console.error(`⚠️ LLM 错误: ${err.message}`);
@@ -359,12 +359,10 @@ export class WSServer {
     ws: WebSocket,
     englishText: string,
     userText: string,
+    mode: CorrectionMode,
   ): Promise<void> {
     const llm = this.llmMap.get(ws);
     if (!llm) return;
-
-    const session = this.sessionMap.get(ws);
-    const mode = session?.correctionMode || 'coach';
 
     const correctionPrompt = mode === 'immersive'
       ? 'Do NOT correct any errors. Only translate.'
