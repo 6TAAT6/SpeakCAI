@@ -328,11 +328,18 @@ export class WSServer {
     const correctionPrompt = mode === 'immersive'
       ? 'Do NOT correct any errors. Only translate.'
       : [
-          'Check if the student made REAL grammar or vocabulary mistakes. Rules:',
+          'Check if the student made REAL grammar or vocabulary mistakes. Be conservative — only flag clear, objective errors.',
+          '',
+          'CRITICAL: Prefer UNDER-correction to OVER-correction. A false positive (correcting something that is already fine) is WORSE than missing a minor mistake.',
+          '',
+          'Rules:',
           '- The student speaks via voice recognition, so punctuation and capitalization are NOT errors. Never correct them.',
-          '- ONLY correct real mistakes: wrong verb tense, missing articles, wrong word, unnatural phrasing.',
+          '- ONLY correct objective errors: wrong verb tense, subject-verb disagreement, missing articles where unambiguously required, incorrect word that changes meaning.',
+          '- Do NOT correct: natural paraphrases, informal but correct expressions, alternative wording choices, slightly-conversational phrasing.',
+          '- "What do you do in your free time" is correct English. "What do you like to do when you have some free time" is also correct. They mean nearly the same thing — do NOT flag one as wrong.',
           '- If the student asked a question but used a statement tone, you may gently suggest adding question words, but only once per conversation.',
-          '- If there is no real grammar/vocabulary mistake, just output the translation line. Do NOT invent errors.',
+          '- If you are unsure whether something is an error, assume it is CORRECT and skip it.',
+          '- If there is no clear grammar/vocabulary mistake, output ONLY the translation line. Do NOT invent errors.',
         ].join('\n');
 
     const translatePrompt = [
