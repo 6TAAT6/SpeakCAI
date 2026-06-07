@@ -10,7 +10,7 @@ import { XunfeiTTS } from './tts.ts';
 import type { TTSConfig } from './tts.ts';
 import { XunfeiISE } from './pronounce.ts';
 import type { ISEConfig } from './pronounce.ts';
-import { createSession, updateSessionConfig, endSession, addTurn, addPronunciation } from './db.ts';
+import { createSession, updateSessionConfig, endSession, resumeSession, addTurn, addPronunciation } from './db.ts';
 
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
@@ -174,6 +174,10 @@ export class WSServer {
 
       case 'config_update':
         this.handleConfigUpdate(ws, msg);
+        break;
+
+      case 'continue_session':
+        this.handleContinueSession(ws, msg);
         break;
 
       default:
@@ -480,6 +484,32 @@ export class WSServer {
         `⚙️  场景: ${msg.payload.scene}, 纠错: ${msg.payload.correctionMode}`,
       );
     }
+  }
+
+  // ---- 继续历史会话 ----
+  private handleContinueSession(
+    ws: WebSocket,
+    msg: Extract<WSMessage, { type: 'continue_session' }>,
+  ): void {
+    // 重建历史上下文到当前 ConversationSession
+    const session = this.sessionMap.get(ws);
+    if (!session) return;
+
+    session.setConfig(msg.scene, msg.correctionMode);
+    for (const t of msg.turns) {
+      if (t.role === 'user') {
+        session.addUserMessage(t.text);
+      } else {
+        session.addAssistantMessage(t.text);
+      }
+    }
+
+    // DB 层面继续该会话
+    resumeSession(msg.sessionId, msg.scene, msg.correctionMode);
+
+    console.log(
+      `📜 继续会话: ${msg.sessionId.slice(0, 8)} (${msg.turns.length} 条历史)`,
+    );
   }
 
   // ---- 清理 ----

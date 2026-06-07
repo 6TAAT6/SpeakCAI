@@ -75,6 +75,15 @@ export type WSMessage =
         scene: Scene;
         correctionMode: CorrectionMode;
       };
+    }
+
+  // 继续历史会话（浏览器 → 后端）
+  | {
+      type: 'continue_session';
+      sessionId: string;
+      scene: Scene;
+      correctionMode: CorrectionMode;
+      turns: Array<{ role: 'user' | 'assistant'; text: string }>;
     };
 
 // ---- 纠错条目 ----
