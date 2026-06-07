@@ -54,40 +54,44 @@ export function TopBar(props: Props) {
 
   return (
     <header className="top-bar">
-      <span className="brand">SpeakCAI</span>
+      <div className="top-bar-left">
+        <span className="brand">SpeakCAI</span>
+      </div>
 
-      <div className="config-selectors">
-        {/* 练习场景 */}
-        <div className="scene-wrap">
-          <button onClick={(e) => { e.stopPropagation(); setShowSceneMenu(!showSceneMenu); }} className="scene-trigger">
-            {currentScene?.emoji} {currentScene?.label} · {currentMode?.emoji} {currentMode?.label} ▾
-          </button>
-          {showSceneMenu && (
-            <div className="scene-panel">
-              <span className="scene-section-label">场景</span>
-              <div className="scene-section">
-                {scenes.map((s) => (
-                  <button key={s.key} onClick={() => props.updateConfig(s.key, props.correctionMode)}
-                    className={`scene-opt ${props.scene === s.key ? 'active' : ''}`}>
-                    {s.emoji} {s.label}
-                  </button>
-                ))}
+      <div className="top-bar-center">
+        <div className="config-selectors">
+          <div className="scene-wrap">
+            <button onClick={(e) => { e.stopPropagation(); setShowSceneMenu(!showSceneMenu); }} className="scene-trigger">
+              {currentScene?.emoji} {currentScene?.label} · {currentMode?.emoji} {currentMode?.label} ▾
+            </button>
+            {showSceneMenu && (
+              <div className="scene-panel">
+                <span className="scene-section-label">场景</span>
+                <div className="scene-section">
+                  {scenes.map((s) => (
+                    <button key={s.key} onClick={() => props.updateConfig(s.key, props.correctionMode)}
+                      className={`scene-opt ${props.scene === s.key ? 'active' : ''}`}>
+                      {s.emoji} {s.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="scene-divider" />
+                <span className="scene-section-label">模式</span>
+                <div className="scene-section">
+                  {modes.map((m) => (
+                    <button key={m.key} onClick={() => props.updateConfig(props.scene, m.key)}
+                      className={`scene-opt ${props.correctionMode === m.key ? 'active' : ''}`}>
+                      {m.emoji} {m.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="scene-divider" />
-              <span className="scene-section-label">模式</span>
-              <div className="scene-section">
-                {modes.map((m) => (
-                  <button key={m.key} onClick={() => props.updateConfig(props.scene, m.key)}
-                    className={`scene-opt ${props.correctionMode === m.key ? 'active' : ''}`}>
-                    {m.emoji} {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* 设置 */}
+      <div className="top-bar-right">
         <div className="settings-wrap">
           <button onClick={(e) => { e.stopPropagation(); props.setShowSettings(!props.showSettings); }} className="settings-btn">
             ⚙ 设置
@@ -117,11 +121,10 @@ export function TopBar(props: Props) {
             </div>
           )}
         </div>
+        <span className="status-badge" style={{ color: props.statusColor }}>
+          {props.statusEmoji}
+        </span>
       </div>
-
-      <span className="status-badge" style={{ color: props.statusColor }}>
-        {props.statusEmoji} {props.statusText}
-      </span>
     </header>
   );
 }
