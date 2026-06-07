@@ -68,6 +68,16 @@ export function App() {
     ttsBufferRef.current = null;
     playbackOffsetRef.current = 0;
     stopAudio();
+    // 通知后端重置会话上下文，避免新对话带上旧历史
+    messagesRef.current.send({ type: 'config_update', payload: { scene, correctionMode } });
+  }, []);
+
+  /** 刷新侧边栏历史列表 */
+  const refreshSessions = useCallback(async () => {
+    try {
+      const r = await fetch('/api/sessions');
+      setSessions(await r.json());
+    } catch { /* ignore */ }
   }, []);
 
   /** 点击历史项 → 加载对话详情 */
@@ -490,6 +500,7 @@ export function App() {
       setTtsPlaying(false);
       setInterrupted(true);
       stopAudio(true);
+      refreshSessions();
     }
   };
 
@@ -508,12 +519,9 @@ export function App() {
       setFrameCount(0);
       setPartialText('');
     } else {
+      // 停止后再开始：保留已有对话内容，仅重置临时状态
       setReportOpen(false);
       setReport(null);
-      resetConvoTimer();
-      setTurns([]);
-      setAiCurrent('');
-      aiCurrentRef.current = '';
       setAiStreaming(false);
       setPartialText('');
       setInterrupted(false);
@@ -522,7 +530,7 @@ export function App() {
       playbackOffsetRef.current = 0;
       await start();
     }
-  }, [isRecording, start, stop, resetConvoTimer]);
+  }, [isRecording, start, stop]);
 
   const toggleReport = useCallback(async () => {
     if (reportOpen) { setReportOpen(false); return; }
@@ -542,12 +550,13 @@ export function App() {
         return;
       }
       setReport(await r.json());
+      refreshSessions();
     } catch {
       setReportError('网络错误，请重试');
     } finally {
       setReportLoading(false);
     }
-  }, [reportOpen, turns, scene, correctionMode]);
+  }, [reportOpen, turns, scene, correctionMode, refreshSessions]);
 
   const wsReady = status === 'connected';
   const hasConv = turns.length > 0 || partialText || aiCurrent || aiStreaming;
