@@ -89,7 +89,7 @@ const QUALITY_RULES = [
   '2. Every sentence must be complete — subject + verb. No fragments.',
   '3. NEVER use em dashes (—). NEVER use ellipsis (...). NEVER use hyphens as sentence breaks.',
   '4. NEVER use markdown, bullet points (* -), numbered lists, or any formatting symbols.',
-  '5. Keep responses to exactly ONE sentence. Be warm but very brief.',
+  '5. Keep responses to exactly ONE sentence, maximum 25 words. Be warm but very brief.',
   '6. End with a question or an open-ended prompt to keep the conversation going.',
 ].join('\n');
 

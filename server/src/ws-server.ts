@@ -12,6 +12,33 @@ import { XunfeiISE } from './pronounce.ts';
 import type { ISEConfig } from './pronounce.ts';
 import { createSession, updateSessionConfig, endSession, resumeSession, addTurn, addPronunciation } from './db.ts';
 
+// ---- 工具函数 ----
+
+/** 英语语音约 20 字符/秒，250 字符 ≈ 12.5 秒语音，给讯飞 WS 15 秒超时留足余量 */
+const TTS_MAX_CHARS = 250;
+
+/**
+ * 截断文本到安全长度，优先在句末边界截断。
+ * 讯飞 TTS WebSocket 约 15 秒空闲断开，TTS 合成过长文本时连接超时导致语音中断。
+ * 截断后字幕=TTS 文本，用户看到的就是听到的。
+ */
+function truncateForTTS(text: string, maxLen: number = TTS_MAX_CHARS): string {
+  if (text.length <= maxLen) return text;
+  const within = text.slice(0, maxLen);
+  const lastEnd = Math.max(
+    within.lastIndexOf('.'),
+    within.lastIndexOf('!'),
+    within.lastIndexOf('?'),
+  );
+  if (lastEnd > maxLen * 0.5) {
+    return within.slice(0, lastEnd + 1).trim();
+  }
+  const lastSpace = within.lastIndexOf(' ');
+  return lastSpace > maxLen * 0.5
+    ? within.slice(0, lastSpace).trim()
+    : within.trim();
+}
+
 // ---- 环境配置（运行时读取，避免 ES Module import hoisting 时序问题）----
 const getASRConfig = (): ASRConfig => ({
   appId: process.env.XUNFEI_APP_ID || '',
@@ -302,12 +329,18 @@ export class WSServer {
         session.addAssistantMessage(englishText);
         addTurn(session.sessionId, 'assistant', englishText);
 
-        // 一次性发送完整英语（字幕=TTS 文本，保证一致）
-        this.send(ws, { type: 'llm_done', text: englishText });
+        // TTS 安全截断：讯飞 WS 约 15 秒超时，~250 字符 ≈ 12 秒语音，留足余量
+        const ttsText = truncateForTTS(englishText);
+        if (ttsText !== englishText) {
+          console.log(`✂️ TTS 文本截断: ${englishText.length} → ${ttsText.length} 字符`);
+        }
 
-        this.handleTTS(ws, englishText);
+        // 字幕 = TTS 文本，保证看到的就是听到的
+        this.send(ws, { type: 'llm_done', text: ttsText });
 
-        // Step 2: 异步中文翻译 + 纠错
+        this.handleTTS(ws, ttsText);
+
+        // Step 2: 异步中文翻译 + 纠错（用完整文本，保证翻译准确）
         this.handleTranslation(ws, englishText, text);
       },
       onError: (err: Error) => {
