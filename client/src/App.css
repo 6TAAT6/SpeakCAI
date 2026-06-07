@@ -33,6 +33,22 @@ body {
   overflow: hidden;
 }
 
+/* 全局细滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -790,6 +806,22 @@ body {
 [data-theme="dark"] .error-message {
   background: #450a0a;
   border-color: var(--danger);
+}
+
+/* 暗色模式滚动条：深色轨道 + 半透明滑块，不刺眼 */
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }
 
 /* ---- 历史对话详情（主区域）---- */
