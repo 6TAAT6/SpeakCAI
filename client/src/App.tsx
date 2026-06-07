@@ -39,7 +39,7 @@ function formatLocalTime(utcStr: string): string {
 }
 
 export function App() {
-  const { status, messages, lastMessage } = useWebSocket(getWsUrl());
+  const { status, sessionId, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
 
   // ---- 对话历史 ----
@@ -647,9 +647,7 @@ export function App() {
     }
   }, [isRecording, start, stop]);
 
-  const toggleReport = useCallback(async () => {
-    if (reportOpen) { setReportOpen(false); return; }
-    setReportOpen(true);
+  const generateReport = useCallback(async () => {
     setReportLoading(true);
     setReportError('');
     setReport(null);
@@ -657,7 +655,7 @@ export function App() {
       const r = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: undefined, turns, scene, mode: correctionMode }),
+        body: JSON.stringify({ sessionId, turns, scene, mode: correctionMode }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({ error: '报告生成失败' }));
@@ -671,7 +669,13 @@ export function App() {
     } finally {
       setReportLoading(false);
     }
-  }, [reportOpen, turns, scene, correctionMode, refreshSessions]);
+  }, [turns, scene, correctionMode, sessionId, refreshSessions]);
+
+  const toggleReport = useCallback(() => {
+    if (reportOpen) { setReportOpen(false); return; }
+    setReportOpen(true);
+    if (!report) generateReport();
+  }, [reportOpen, report, generateReport]);
 
   const wsReady = status === 'connected';
   const hasConv = turns.length > 0 || partialText || aiCurrent || aiStreaming;
@@ -783,7 +787,7 @@ export function App() {
                   sceneEmoji={sceneEmoji}
                   modeLabel={modeLabel}
                   onClose={() => setReportOpen(false)}
-                  onRegenerate={toggleReport}
+                  onRegenerate={generateReport}
                 />
               ) : (
                 <ChatView
