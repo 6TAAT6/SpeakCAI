@@ -11,6 +11,8 @@ interface Props {
   wsReady: boolean;
   captureError: string | null;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
+  onReplayTurn?: (audio: string, index: number) => void;
+  replayIndex?: number | null;
 }
 
 export function ChatView(props: Props) {
@@ -29,6 +31,15 @@ export function ChatView(props: Props) {
         <div key={i} className="turn-group">
           <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
             <span className="bubble-label">{t.role === 'user' ? 'YOU' : '🤖 小T'}</span>
+            {t.audio && props.onReplayTurn && (
+              <button
+                className={`replay-btn${props.replayIndex === i ? ' playing' : ''}`}
+                onClick={() => props.onReplayTurn!(t.audio!, i)}
+                title="重播语音"
+              >
+                {props.replayIndex === i ? '⏹' : '🔊'}
+              </button>
+            )}
             <p>{t.text}</p>
             {t.translation && <p className="ai-translation">{t.translation}</p>}
           </div>

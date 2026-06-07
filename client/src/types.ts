@@ -1,6 +1,6 @@
 /** 前端共享类型 — 消除组件间类型重复定义 */
 
-export interface Turn { role: 'user' | 'ai'; text: string; translation?: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string }
+export interface Turn { role: 'user' | 'ai'; text: string; translation?: string; score?: number; accuracy?: number; fluency?: number; integrity?: number; weakPhones?: string[]; tips?: string; tryAgain?: string; audio?: string }
 
 export type Theme = 'auto' | 'dark' | 'light';
 
