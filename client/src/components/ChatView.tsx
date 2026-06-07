@@ -26,19 +26,17 @@ export function ChatView(props: Props) {
       {props.captureError && <p className="error-message">{props.captureError}</p>}
 
       {props.turns.map((t, i) => (
-        <div key={i}>
+        <div key={i} className="turn-group">
           <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
-            <div className="bubble-header">
-              <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
-              {t.score !== undefined && (
-                <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
-                  {t.score}分
-                </span>
-              )}
-            </div>
+            <span className="bubble-label">{t.role === 'user' ? 'YOU' : '🤖 小T'}</span>
             <p>{t.text}</p>
             {t.translation && <p className="ai-translation">{t.translation}</p>}
           </div>
+          {t.score !== undefined && (
+            <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
+              🎯 {t.score}分
+            </span>
+          )}
           {t.tips && (
             <div className="correction-card">
               <div className="correction-header">💡 Tips</div>
@@ -50,19 +48,23 @@ export function ChatView(props: Props) {
       ))}
 
       {props.partialText && (
-        <div className="bubble user-bubble partial">
-          <span className="bubble-label">You</span>
-          <p>{props.partialText}</p>
+        <div className="turn-group">
+          <div className="bubble user-bubble partial">
+            <span className="bubble-label">YOU</span>
+            <p>{props.partialText}</p>
+          </div>
         </div>
       )}
 
       {(props.aiCurrent || props.aiStreaming) && (
-        <div className="bubble ai-bubble">
-          <div className="bubble-header">
-            <span className="bubble-label">🎤 小T</span>
-            {props.aiStreaming && <span className="streaming-dot" />}
+        <div className="turn-group">
+          <div className="bubble ai-bubble">
+            <div className="bubble-header">
+              <span className="bubble-label">🤖 小T</span>
+              {props.aiStreaming && <span className="streaming-dot" />}
+            </div>
+            <p>{props.aiCurrent || '...'}</p>
           </div>
-          <p>{props.aiCurrent || '...'}</p>
         </div>
       )}
 

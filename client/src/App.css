@@ -157,7 +157,7 @@ body {
   padding: 0 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .sidebar-empty {
@@ -169,75 +169,98 @@ body {
 
 .sidebar-item {
   display: flex;
-  align-items: center;
-  padding: 8px 10px;
+  align-items: flex-start;
+  padding: 12px 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin: 0 2px;
+}
+
+.sidebar-item:last-child {
+  border-bottom: none;
 }
 
 .sidebar-item:hover {
   background: var(--bg);
+  border-color: var(--border);
+  border-left-color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
 .sidebar-item.active {
   background: var(--bg);
   border-color: var(--accent);
+  border-left-color: var(--accent);
+  border-bottom-color: transparent;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+}
+
+.sidebar-item.active + .sidebar-item {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 .sidebar-item.batch-selected {
+  background: var(--bg);
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  border-left-color: var(--accent);
+  border-bottom-color: transparent;
 }
 
 .sidebar-item-content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .sidebar-item-top {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
 .sidebar-scene {
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .sidebar-mode {
   font-size: 0.72rem;
-  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 .sidebar-report-dot {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
+  opacity: 0.7;
 }
 
 .sidebar-date {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
-  margin-left: auto;
 }
 
 .sidebar-item-del {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: none;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   cursor: pointer;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.12s;
+  opacity: 0.55;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+  margin-top: 1px;
 }
 
 .sidebar-item:hover .sidebar-item-del {
@@ -245,8 +268,9 @@ body {
 }
 
 .sidebar-item-del:hover {
-  background: var(--danger);
-  color: #fff;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  opacity: 1;
 }
 
 /* ---- 右侧主面板 ---- */
@@ -272,6 +296,26 @@ body {
   flex-shrink: 0;
 }
 
+.top-bar-left {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.top-bar-center {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.top-bar-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .brand {
   font-size: 1.2rem;
   font-weight: 700;
@@ -282,8 +326,6 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
-  margin-right: 12px;
 }
 
 /* 练习场景 */
@@ -307,11 +349,11 @@ body {
 }
 
 .scene-panel {
-  position: absolute;
-  top: 100%;
+  position: fixed;
+  top: 56px;
   left: 50%;
   transform: translateX(-50%);
-  margin-top: 6px;
+  margin-top: 0;
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -503,34 +545,56 @@ body {
 
 /* ---- 聊天气泡 ---- */
 
-.bubble {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  line-height: 1.55;
+.turn-group {
+  display: flex;
+  flex-direction: column;
   animation: bubble-in 0.25s ease-out;
 }
 
+.turn-group + .turn-group {
+  margin-top: 6px;
+}
+
+.bubble {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  line-height: 1.55;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.bubble p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
 .bubble-label {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
   display: block;
-  margin-bottom: 2px;
-  opacity: 0.7;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
 }
 
 .bubble-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .user-bubble {
   align-self: flex-end;
   background: var(--user-blue);
+  border: 1px solid rgba(37, 99, 235, 0.15);
   border-bottom-right-radius: 4px;
   color: var(--text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.user-bubble .bubble-label {
+  color: var(--accent);
+  opacity: 0.8;
 }
 
 .user-bubble.partial {
@@ -542,6 +606,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .ai-bubble .bubble-label {
@@ -558,12 +623,15 @@ body {
 }
 
 .pronounce-score {
+  align-self: flex-end;
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 600;
   color: #059669;
   background: #d1fae5;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
+  margin-top: 4px;
+  margin-right: 4px;
 }
 
 .streaming-dot {
@@ -672,16 +740,17 @@ body {
 
 .correction-card {
   max-width: 85%;
-  margin-top: -6px;
+  margin-top: 4px;
   margin-left: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
   border: 1px solid #fcd34d;
   background: #fffbeb;
   font-size: 0.85rem;
   color: #92400e;
   line-height: 1.5;
   animation: bubble-in 0.3s ease-out;
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.1);
 }
 
 .correction-card p {
@@ -689,10 +758,10 @@ body {
 }
 
 .correction-header {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: #b45309;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -801,6 +870,11 @@ body {
 
 [data-theme="dark"] .user-bubble {
   background: var(--user-blue);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+[data-theme="dark"] .sidebar-item {
+  border-bottom-color: rgba(255, 255, 255, 0.12);
 }
 
 [data-theme="dark"] .error-message {

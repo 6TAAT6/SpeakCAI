@@ -95,8 +95,8 @@ export function Sidebar(props: Props) {
                     <span className="sidebar-scene">{sceneEmoji[s.scene] || '❓'} {s.scene}</span>
                     <span className="sidebar-mode">{modeEmoji[s.mode] || '❓'}</span>
                     {s.has_report ? <span className="sidebar-report-dot">📊</span> : null}
-                    <span className="sidebar-date">{formatLocalTime(s.created_at)}</span>
                   </div>
+                  <span className="sidebar-date">{formatLocalTime(s.created_at)}</span>
                 </div>
                 {!props.batchMode && (
                   <button

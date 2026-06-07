@@ -617,7 +617,7 @@ export function App() {
                     {sessionTurns.map((t) => (
                       <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
                         <div className="bubble-header">
-                          <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 AI'}</span>
+                          <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 小T'}</span>
                           <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatLocalTime(t.created_at)}</span>
                         </div>
                         <p>{t.text}</p>

@@ -7,6 +7,28 @@
   gap: 0;
 }
 
+.report-loading-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 30vh;
+  user-select: none;
+}
+
+.report-loading-avatar {
+  font-size: 2.2rem;
+  line-height: 1;
+  animation: avatar-breathe 3s ease-in-out infinite;
+}
+
+.report-loading-text {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
 .report-header-bar {
   display: flex;
   align-items: center;
