@@ -116,6 +116,12 @@ export function endSession(sessionId: string): void {
   d.pragma('wal_checkpoint(PASSIVE)');
 }
 
+/** 继续历史会话：清除 ended_at，更新场景与模式 */
+export function resumeSession(sessionId: string, scene: string, mode: string): void {
+  const d = getDB();
+  d.prepare('UPDATE sessions SET scene = ?, mode = ?, ended_at = NULL WHERE session_id = ?').run(scene, mode, sessionId);
+}
+
 export function deleteSession(sessionId: string): void {
   const d = getDB();
   d.prepare('DELETE FROM turns WHERE session_id = ?').run(sessionId);

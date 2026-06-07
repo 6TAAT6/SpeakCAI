@@ -102,6 +102,56 @@ export function App() {
     setHistReportError('');
   }, []);
 
+  /** 历史详情 → 继续对话 */
+  const handleContinueChat = useCallback(async () => {
+    const sid = selectedSession;
+    if (!sid || sessionTurns.length === 0) return;
+    const sess = sessions.find(s => s.session_id === sid);
+    if (!sess) return;
+    // 如果有活跃对话，先确认
+    if (turnsRef.current.length > 0 && !confirm('当前对话内容将被替换，确定继续这条历史对话吗？')) return;
+
+    // 把场景/模式切到旧 session 的配置
+    setScene(sess.scene as Scene);
+    setCorrectionMode(sess.mode as CorrectionMode);
+
+    // 重建前端 turns 状态（仅文本，无发音分数/翻译等实时数据）
+    const histTurns: Turn[] = sessionTurns.map(t => ({
+      role: t.role === 'assistant' ? 'ai' : 'user',
+      text: t.text,
+    }));
+    setTurns(histTurns);
+    setAiCurrent('');
+    aiCurrentRef.current = '';
+    setAiStreaming(false);
+    setPartialText('');
+    setInterrupted(false);
+    setReportOpen(false);
+    setReport(null);
+    setReportError('');
+    audioChunksRef.current = [];
+    ttsBufferRef.current = null;
+    playbackOffsetRef.current = 0;
+    stopAudio();
+    resetConvoTimer();
+
+    // 返回聊天视图
+    setSelectedSession(null);
+    setSessionTurns([]);
+    setHistReportOpen(false);
+    setHistReport(null);
+    setHistReportError('');
+
+    // 通知后端重建会话上下文
+    messagesRef.current.send({
+      type: 'continue_session',
+      sessionId: sid,
+      scene: sess.scene as Scene,
+      correctionMode: sess.mode as CorrectionMode,
+      turns: sessionTurns.map(t => ({ role: t.role as 'user' | 'assistant', text: t.text })),
+    });
+  }, [selectedSession, sessionTurns, sessions]);
+
   const deleteSelectedSession = useCallback(async () => {
     if (!selectedSession || !confirm('确定删除这条对话记录吗？')) return;
     await fetch(`/api/sessions/${selectedSession}`, { method: 'DELETE' });
@@ -222,6 +272,8 @@ export function App() {
 
   // ---- 对话时间线 ----
   const [turns, setTurns] = useState<Turn[]>([]);
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
   const [partialText, setPartialText] = useState('');
   const [aiCurrent, setAiCurrent] = useState('');
   const [aiStreaming, setAiStreaming] = useState(false);
@@ -607,6 +659,9 @@ export function App() {
               <div className="history-detail">
                 <div className="history-detail-bar">
                   <button onClick={goBackToChat} className="ctrl-btn">← 返回对话</button>
+                  <button onClick={handleContinueChat} className="ctrl-btn" disabled={sessionTurns.length === 0}>
+                    💬 继续对话
+                  </button>
                   <button onClick={toggleHistReport} className="ctrl-btn" disabled={histReportLoading}>
                     {histReportOpen ? '💬 对话记录' : selectedHasReport ? '📊 学习报告' : '🧠 生成报告'}
                   </button>
