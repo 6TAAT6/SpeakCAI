@@ -46,10 +46,12 @@ export function App() {
   const [sessionTurns, setSessionTurns] = useState<TurnRow[]>([]);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [continuingSessionId, setContinuingSessionId] = useState<string | null>(null);
 
   /** 新建对话：清空右侧回到聊天界面 */
   const handleNewChat = useCallback(() => {
     setSelectedSession(null);
+    setContinuingSessionId(null);
     setSessionTurns([]);
     setHistReportOpen(false);
     setHistReport(null);
@@ -96,6 +98,7 @@ export function App() {
   /** 历史详情 → 返回聊天 */
   const goBackToChat = useCallback(() => {
     setSelectedSession(null);
+    setContinuingSessionId(null);
     setSessionTurns([]);
     setHistReportOpen(false);
     setHistReport(null);
@@ -135,8 +138,9 @@ export function App() {
     stopAudio();
     resetConvoTimer();
 
-    // 返回聊天视图
+    // 返回聊天视图，保留侧边栏高亮
     setSelectedSession(null);
+    setContinuingSessionId(sid);
     setSessionTurns([]);
     setHistReportOpen(false);
     setHistReport(null);
@@ -622,7 +626,7 @@ export function App() {
         {/* ---- 侧边栏 ---- */}
         <Sidebar
           sessions={sessions}
-          selectedSession={selectedSession}
+          selectedSession={selectedSession || continuingSessionId}
           batchMode={batchMode}
           selectedIds={selectedIds}
           scene={scene}
@@ -672,7 +676,12 @@ export function App() {
 
                 {histReportOpen ? (
                   <div className="report-panel">
-                    {histReportLoading && <p className="placeholder" style={{ marginTop: '10%' }}>📊 小T 正在整理报告...</p>}
+                    {histReportLoading && (
+                      <div className="report-loading-hero">
+                        <div className="report-loading-avatar">(¯▿¯)</div>
+                        <p className="report-loading-text">小T 正在整理报告...</p>
+                      </div>
+                    )}
                     {histReportError && <p className="error-message">{histReportError}</p>}
                     {histReport && <ReportAnalysis analysis={histReport} />}
                   </div>
