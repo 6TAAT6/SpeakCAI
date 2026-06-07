@@ -564,11 +564,35 @@ body {
 .bottom-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  justify-content: space-between;
   padding: 14px 20px;
   background: var(--surface);
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.bottom-bar-left,
+.bottom-bar-right {
+  flex: 1;
+  min-width: 80px;
+}
+
+.bottom-bar-left {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.bottom-bar-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bottom-bar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   flex-shrink: 0;
 }
 
