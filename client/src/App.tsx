@@ -373,13 +373,13 @@ export function App() {
       }
       const analysis = await genR.json();
       setHistReport(analysis);
-      setSessions(prev => prev.map(s => s.session_id === selectedSession ? { ...s, has_report: 1 } : s));
+      refreshSessions();
     } catch {
       setHistReportError('网络错误');
     } finally {
       setHistReportLoading(false);
     }
-  }, [histReportOpen, histReport, selectedSession, sessions, sessionTurns]);
+  }, [histReportOpen, histReport, selectedSession, sessions, sessionTurns, refreshSessions]);
 
   const resetConvoTimer = useCallback(() => setConvoStartTime(Date.now()), []);
 
@@ -416,6 +416,9 @@ export function App() {
     setPartialText('');
     setInterrupted(false);
     setTtsPlaying(false);
+    setReport(null);
+    setReportOpen(false);
+    setReportError('');
     stopAudio();
   }, [stopAudio]);
 
@@ -655,7 +658,7 @@ export function App() {
       const r = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, turns, scene, mode: correctionMode }),
+        body: JSON.stringify({ sessionId, turns: turns.map(({ audio, ...t }) => t), scene, mode: correctionMode }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({ error: '报告生成失败' }));
