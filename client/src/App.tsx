@@ -8,7 +8,8 @@ import { Sidebar } from './components/Sidebar.tsx';
 import { ReportAnalysis } from './components/ReportAnalysis.tsx';
 import { ChatView } from './components/ChatView.tsx';
 import { ReportView } from './components/ReportView.tsx';
-import type { LLMAnalysis, Scene, CorrectionMode } from '@shared/types.ts';
+import { ProgressView } from './components/ProgressView.tsx';
+import type { LLMAnalysis, Scene, CorrectionMode, ProgressData } from '@shared/types.ts';
 import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
 
 const sceneEmoji: Record<string, string> = { daily: '💬', interview: '💼', ordering: '🍽️', meeting: '📊', travel: '✈️', shopping: '🛍️', hotel: '🏨' };
@@ -310,6 +311,26 @@ export function App() {
   const [histReportLoading, setHistReportLoading] = useState(false);
   const [histReport, setHistReport] = useState<LLMAnalysis | null>(null);
   const [histReportError, setHistReportError] = useState('');
+
+  // ---- 成长曲线 ----
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [progressError, setProgressError] = useState('');
+
+  const toggleProgress = useCallback(async () => {
+    if (progressOpen) { setProgressOpen(false); return; }
+    setProgressOpen(true);
+    setProgressError('');
+    if (progress) return;
+    setProgressLoading(true);
+    try {
+      const r = await fetch('/api/progress');
+      if (!r.ok) { setProgressError('加载失败'); return; }
+      setProgress(await r.json());
+    } catch { setProgressError('网络错误'); }
+    finally { setProgressLoading(false); }
+  }, [progressOpen, progress]);
 
   const toggleHistReport = useCallback(async () => {
     if (histReportOpen) { setHistReportOpen(false); return; }
@@ -673,6 +694,7 @@ export function App() {
           onToggleSelectId={toggleSelectId}
           onSelectAllIds={selectAllIds}
           onBatchDelete={batchDelete}
+          onProgress={toggleProgress}
         />
 
         {/* ---- 右侧主面板 ---- */}
@@ -737,9 +759,16 @@ export function App() {
               </div>
             )}
 
-            {/* ---- 当前对话 / 报告 ---- */}
+            {/* ---- 当前对话 / 报告 / 成长曲线 ---- */}
             {!selectedSession && (<>
-              {reportOpen ? (
+              {progressOpen ? (
+                <ProgressView
+                  data={progress || { sessions: [], weakPhonemes: [] }}
+                  loading={progressLoading}
+                  error={progressError}
+                  onClose={() => setProgressOpen(false)}
+                />
+              ) : reportOpen ? (
                 <ReportView
                   turns={turns}
                   report={report}

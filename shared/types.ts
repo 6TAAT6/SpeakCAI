@@ -157,3 +157,21 @@ export interface LLMAnalysis {
   improvementTips: string[];
 }
 
+// ---- 成长曲线 ----
+export interface ProgressSession {
+  session_id: string;
+  date: string;
+  scene: string;
+  mode: string;
+  turn_count: number;
+  avg_score: number;
+  avg_accuracy: number;
+  avg_fluency: number;
+  avg_integrity: number;
+}
+
+export interface ProgressData {
+  sessions: ProgressSession[];
+  weakPhonemes: Array<{ phoneme: string; count: number }>;
+}
+

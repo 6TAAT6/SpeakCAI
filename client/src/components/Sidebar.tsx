@@ -25,6 +25,7 @@ interface Props {
   onToggleSelectId: (id: string) => void;
   onSelectAllIds: (ids: string[]) => void;
   onBatchDelete: () => void;
+  onProgress: () => void;
 }
 
 export function Sidebar(props: Props) {
@@ -35,6 +36,9 @@ export function Sidebar(props: Props) {
       {/* 新建对话 */}
       <button onClick={props.onNewChat} className="sidebar-new-btn">
         ＋ 新建对话
+      </button>
+      <button onClick={props.onProgress} className="sidebar-new-btn" style={{ marginTop: 4 }}>
+        📈 成长曲线
       </button>
 
       {/* 批量工具栏 */}
