@@ -2,6 +2,8 @@
 
 AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错和课后报告。72 小时参赛作品。
 
+> 🎬 **视频演示**：[七牛云 x XEngineer 暑期实训营 — AI 英语口语陪练](https://b23.tv/kmrZa18)
+
 ## 核心功能
 
 - **场景选择** — 日常 / 面试 / 点餐 / 会议 / 旅游 / 购物 / 酒店，一键切换
@@ -11,10 +13,14 @@ AI 英语口语陪练工具，支持场景选择、实时语音对话、发音�
 - **即时纠错** — 回复中的语法/表达错误自动提取为纠错卡片，教练模式追问重说
 - **两种纠错模式** — 沉浸（课后纠正）/ 教练（追问重说，默认）
 - **课后报告** — 发音曲线 + 雷达图 + 薄弱音素 + LLM 定性分析，自动存库
-- **对话历史** — 查看、回放、删除过往对话记录
+- **成长曲线** — 多场对话趋势对比，量化追踪口语进步
+- **对话历史** — 查看、回放、继续、删除过往对话记录
 - **AI 打断/继续** — 随时打断 AI 回复和播报，支持从暂停位置续播
+- **AI 语音重播** — 每条 AI 回复支持一键重播语音
 - **深色模式** — 自动 / 深色 / 浅色一键切换
+- **字体调整** — 小 / 中 / 大三档字体自由切换
 - **中文翻译** — LLM 双语输出，每轮中文对照
+- **批量管理** — 对话历史支持批量选择和删除
 
 ## 技术栈
 
@@ -57,24 +63,35 @@ SpeakCAI/
 ├── shared/
 │   └── types.ts                  # 前后端共享类型定义
 ├── client/                       # React 前端（端口 5173）
+│   ├── index.html                # HTML 入口
+│   ├── package.json              # 依赖与脚本
+│   ├── vite.config.ts            # Vite 配置 + API 代理
+│   ├── tsconfig.json             # TypeScript 配置
 │   └── src/
-│       ├── main.tsx              # 入口
+│       ├── main.tsx              # 应用入口
 │       ├── App.tsx               # 主界面 + 对话逻辑 + TTS 播放
-│       ├── App.css               # 样式（含深色模式）
+│       ├── App.css               # 全局样式（含深色模式）
 │       ├── types.ts              # 前端共享类型
 │       ├── components/
-│       │   ├── TopBar.tsx        # 顶栏：品牌 + 场景/模式 + 状态
+│       │   ├── Sidebar.tsx       # 侧边栏：新对话 + 历史 + 批量
+│       │   ├── TopBar.tsx        # 顶栏：品牌 + 场景/模式 + 设置
 │       │   ├── BottomBar.tsx     # 底栏：录音/打断/报告按钮
-│       │   ├── ChatView.tsx      # 对话气泡渲染
+│       │   ├── ChatView.tsx      # 对话气泡渲染 + 语音重播
 │       │   ├── HistoryView.tsx   # 历史列表 + 详情
 │       │   ├── ReportView.tsx    # 报告面板 + 图表
-│       │   └── ReportAnalysis.tsx # LLM 定性分析渲染
+│       │   ├── ReportView.css    # 报告面板样式
+│       │   ├── ReportAnalysis.tsx # LLM 定性分析渲染
+│       │   └── ProgressView.tsx  # 成长曲线 + 趋势图
 │       ├── hooks/
 │       │   ├── useWebSocket.ts   # WebSocket 连接 + 自动重连
 │       │   └── useAudioCapture.ts # 麦克风采集
-│       └── workers/
-│           └── audio-processor.ts # AudioWorklet 降采样
+│       ├── workers/
+│       │   └── audio-processor.ts # AudioWorklet 降采样
+│       └── utils/
+│           └── binary.ts         # Base64 编解码
 ├── server/                       # Node.js 后端（HTTP 3000 / WS 3001）
+│   ├── package.json              # 依赖与脚本
+│   ├── tsconfig.json             # TypeScript 配置
 │   └── src/
 │       ├── index.ts              # 入口 + REST API + 报告生成
 │       ├── ws-server.ts          # WebSocket 消息路由
@@ -85,10 +102,12 @@ SpeakCAI/
 │       ├── session.ts            # 会话管理 + 系统提示词
 │       └── db.ts                 # SQLite CRUD
 ├── .env.example                  # API Key 模板
+├── .gitignore                    # Git 忽略规则
 ├── .editorconfig                 # 编辑器规范
 ├── .prettierrc                   # 代码格式化
 ├── eslint.config.js              # 代码规范
-└── start.bat                     # 启动脚本
+├── CLAUDE.md                     # AI 助手指令
+└── start.bat                     # 一键启动脚本
 ```
 
 ## 快速开始
@@ -124,19 +143,21 @@ cd client && npm run dev
 
 ## 开发规划
 
-- [x] 项目脚手架 + WS 联通
-- [x] 音频采集 AudioWorklet
-- [x] 讯飞实时 ASR
-- [x] 实时字幕显示
-- [x] DeepSeek 流式对话
-- [x] 讯飞 TTS 语音合成
-- [x] 场景选择 + 三种纠错模式
-- [x] 讯飞 ISE 发音评测
-- [x] 即时纠错气泡
-- [x] 深色模式
-- [x] 对话历史页
-- [x] SQLite 对话持久化
-- [x] 课后总结报告
-- [x] 组件化拆分（TopBar / BottomBar / ChatView / HistoryView / ReportView / ReportAnalysis）
-- [ ] 量化进度追踪（多场对比、成长曲线）
-- [ ] README + Demo 视频
+目前全部功能已开发完成。
+
+| 阶段 | 功能 | 状态 |
+|---|---|---|
+| 核心管道 | 项目脚手架 + WS 联通 | ✅ |
+| | 音频采集 AudioWorklet | ✅ |
+| | 讯飞实时 ASR | ✅ |
+| | 实时字幕显示 | ✅ |
+| 对话引擎 | DeepSeek 流式对话 + 双语翻译 | ✅ |
+| | 讯飞 TTS 语音合成 + 播放 | ✅ |
+| 纠错能力 | 场景选择 + 两种纠错模式 | ✅ |
+| | 讯飞 ISE 发音评测 | ✅ |
+| | 即时纠错气泡 + 严师重说 | ✅ |
+| 课后体系 | 课后总结报告（发音曲线/雷达图/弱音素/LLM 分析） | ✅ |
+| | 成长曲线量化追踪（多场对比/趋势图） | ✅ |
+| 收尾 | 对话历史（查看/回放/继续/删除） | ✅ |
+| | 深色模式 + UI 打磨 + 响应式 | ✅ |
+| | README + 视频演示 | ✅ |
