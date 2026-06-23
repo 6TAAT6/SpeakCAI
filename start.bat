@@ -1,17 +1,13 @@
 @echo off
-title SpeakCAI — 前后端
-echo 🚀 SpeakCAI 启动中...
+chcp 65001 >nul
+title SpeakCAI
 
-start /b cmd /c "cd /d %~dp0server && npm run dev"
-start /b cmd /c "cd /d %~dp0client && npm run dev"
+taskkill /F /IM node.exe >nul 2>&1
+timeout /t 1 /nobreak >nul
 
-timeout /t 4 /nobreak >nul
+start /min "Server" cmd /c "cd /d d:\Reasonix_test2\server && npm run dev"
+start /min "Client" cmd /c "cd /d d:\Reasonix_test2\client && npm run dev"
+
+timeout /t 3 /nobreak >nul
 start http://localhost:5173
-echo.
-echo ✅ 后端 http://localhost:3000
-echo ✅ 前端 http://localhost:5173
-echo.
-echo 按任意键停止所有服务...
-pause >nul
-taskkill //F //IM node.exe 2>nul
-echo 🛑 已关闭
+exit

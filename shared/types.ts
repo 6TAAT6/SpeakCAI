@@ -85,7 +85,10 @@ export type WSMessage =
       scene: Scene;
       correctionMode: CorrectionMode;
       turns: Array<{ role: 'user' | 'assistant'; text: string }>;
-    };
+    }
+
+  // 服务端错误通知（后端 → 浏览器）
+  | { type: 'service_error'; service: 'asr' | 'tts' | 'llm'; message: string };
 
 // ---- 纠错条目 ----
 export interface CorrectionItem {

@@ -1,0 +1,13 @@
+{
+  "name": "speakcai",
+  "private": true,
+  "version": "1.0.0",
+  "description": "英语口语教练 — React 19 + Express + 讯飞 ASR/TTS/ISE + DeepSeek",
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,green \"cd server && npm run dev\" \"cd client && npm run dev\"",
+    "install:all": "cd server && npm i && cd ../client && npm i"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

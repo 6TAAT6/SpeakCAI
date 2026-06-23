@@ -41,6 +41,7 @@ function formatLocalTime(utcStr: string): string {
 export function App() {
   const { status, sessionId, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
+  const [serviceError, setServiceError] = useState<{ service: string; message: string } | null>(null);
 
   // ---- 对话历史 ----
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -298,7 +299,10 @@ export function App() {
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const replaySourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const replayPausedRef = useRef(false); // 重播暂停标记
+  const replayOffsetRef = useRef(0); // 重播暂停位置（秒）
   const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const [replayPaused, setReplayPaused] = useState(false);
 
   // ---- 学习报告 ----
   const [reportOpen, setReportOpen] = useState(false);
@@ -454,8 +458,26 @@ export function App() {
 
   /** 重播缓存的 AI 语音 */
   const handleReplayTurn = useCallback((audioBase64: string, index: number) => {
+    // 点击正在播放的同一条 → 暂停
+    if (replayIndex === index && replaySourceRef.current) {
+      const ctx = audioCtxRef.current;
+      if (ctx) {
+        replayOffsetRef.current = ctx.currentTime - (playbackStartRef.current || 0);
+        replayPausedRef.current = true;
+      }
+      try { replaySourceRef.current.stop(); } catch { /* noop */ }
+      replaySourceRef.current = null;
+      setReplayPaused(true);
+      return;
+    }
+    // 点击另一条或暂停后继续 → 从头或从暂停位置播放
+    const offset = (replayIndex === index && replayPausedRef.current)
+      ? replayOffsetRef.current : 0;
     try { replaySourceRef.current?.stop(); } catch { /* noop */ }
     replaySourceRef.current = null;
+    replayPausedRef.current = false;
+    replayOffsetRef.current = 0;
+    setReplayPaused(false);
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
     const raw = base64ToUint8Array(audioBase64);
@@ -468,10 +490,17 @@ export function App() {
     source.buffer = buffer;
     source.connect(ctx.destination);
     replaySourceRef.current = source;
+    playbackStartRef.current = ctx.currentTime - offset;
     setReplayIndex(index);
-    source.onended = () => { replaySourceRef.current = null; setReplayIndex(null); };
-    source.start();
-  }, []);
+    source.onended = () => {
+      replaySourceRef.current = null;
+      setReplayIndex(null);
+      setReplayPaused(false);
+      replayPausedRef.current = false;
+      replayOffsetRef.current = 0;
+    };
+    source.start(0, offset);
+  }, [replayIndex]);
 
   // ---- 自动滚动 ----
   useEffect(() => {
@@ -558,6 +587,9 @@ export function App() {
         }
         audioChunksRef.current.push(base64ToUint8Array(lastMessage.data));
         break;
+      case 'service_error':
+        setServiceError({ service: lastMessage.service, message: lastMessage.message });
+        break;
       case 'tts_done': {
         const chunks = audioChunksRef.current;
         if (chunks.length > 0) {
@@ -636,6 +668,8 @@ export function App() {
       stop();
       setFrameCount(0);
       setPartialText('');
+      // 停止录音时刷新侧边栏，让当前对话记录立即可见
+      refreshSessions();
     } else {
       // 停止后再开始：保留已有对话内容，仅重置临时状态
       setReportOpen(false);
@@ -648,7 +682,7 @@ export function App() {
       playbackOffsetRef.current = 0;
       await start();
     }
-  }, [isRecording, start, stop]);
+  }, [isRecording, start, stop, refreshSessions]);
 
   const generateReport = useCallback(async () => {
     setReportLoading(true);
@@ -723,6 +757,19 @@ export function App() {
             statusText={statusIndicator.text}
             statusColor={statusIndicator.color}
           />
+
+          {/* ---- 连接/服务错误提示 ---- */}
+          {status !== 'connected' && (
+            <div className="sys-banner sys-banner-warn">
+              ⚠️ 服务器{status === 'connecting' ? '连接中...' : status === 'disconnected' ? '已断连，正在重连...' : '连接错误'} — 录音和对话功能暂时不可用
+            </div>
+          )}
+          {serviceError && (
+            <div className="sys-banner sys-banner-err">
+              ❌ {serviceError.service === 'asr' ? '语音识别' : serviceError.service === 'tts' ? '语音合成' : 'AI 对话'}失败: {serviceError.message}
+              <button className="sys-banner-close" onClick={() => setServiceError(null)}>✕</button>
+            </div>
+          )}
 
           <main className="chat-area">
             {/* ---- 历史对话详情 ---- */}
@@ -805,6 +852,7 @@ export function App() {
                   chatEndRef={chatEndRef}
                   onReplayTurn={handleReplayTurn}
                   replayIndex={replayIndex}
+                  replayPaused={replayPaused}
                 />
               )}
             </>)}

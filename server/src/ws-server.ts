@@ -93,6 +93,9 @@ export class WSServer {
   private iseBuffer: Map<WebSocket, Buffer[]> = new Map();
   // TTS 播放期间屏蔽回声 ASR：合成时设 Infinity，前端播完发 tts_playback_done 解除
   private ttsActiveUntil: Map<WebSocket, number> = new Map();
+  // 回复防抖：用户停 800ms 后才触发 AI，避免口误停顿被抢话
+  private replyDebounce: Map<WebSocket, ReturnType<typeof setTimeout>> = new Map();
+  private pendingFinals: Map<WebSocket, string[]> = new Map();
 
   constructor(private port: number) {}
 
@@ -150,6 +153,10 @@ export class WSServer {
         this.ttsMap.get(ws)?.abort();
         this.ttsActiveUntil.delete(ws);
         this.ttsMap.delete(ws);
+        const t = this.replyDebounce.get(ws);
+        if (t) clearTimeout(t);
+        this.replyDebounce.delete(ws);
+        this.pendingFinals.delete(ws);
       });
 
       ws.on('error', (err) => {
@@ -268,7 +275,19 @@ export class WSServer {
           }
 
           this.send(ws, { type: 'asr_final', text: cleaned });
-          this.handleUserInput(ws, cleaned);
+
+          // 防抖：用户停 800ms 没新语音才触发 AI，避免口误停顿被抢话
+          const pending = this.pendingFinals.get(ws) || [];
+          pending.push(cleaned);
+          this.pendingFinals.set(ws, pending);
+          const prev = this.replyDebounce.get(ws);
+          if (prev) clearTimeout(prev);
+          this.replyDebounce.set(ws, setTimeout(() => {
+            this.replyDebounce.delete(ws);
+            const all = (this.pendingFinals.get(ws) || []).join(' ');
+            this.pendingFinals.delete(ws);
+            if (all) this.handleUserInput(ws, all);
+          }, 800));
           // 当前语音段说完 → 立即异步评测（ISE 独立连接，不阻塞 LLM/TTS）
           const segBuf = this.iseBuffer.get(ws);
           if (segBuf && segBuf.length > 0) {
@@ -279,8 +298,10 @@ export class WSServer {
         },
         onError: (err: Error) => {
           console.error(`⚠️ ASR 错误: ${err.message}`);
+          this.send(ws, { type: 'service_error', service: 'asr', message: err.message });
           this.pendingAudio.delete(ws);
           this.iseBuffer.delete(ws);
+          this.asrMap.delete(ws);
         },
       });
       asr.connect();
@@ -449,6 +470,7 @@ export class WSServer {
       onError: (err: Error) => {
         this.ttsActiveUntil.delete(ws); // 合成失败，解除屏蔽
         console.error(`⚠️ TTS 错误: ${err.message}`);
+        this.send(ws, { type: 'service_error', service: 'tts', message: err.message });
       },
     });
   }
@@ -491,6 +513,12 @@ export class WSServer {
     // 中断当前 TTS 合成
     this.ttsMap.get(ws)?.abort();
     this.ttsActiveUntil.delete(ws); // 打断：立即解除屏蔽，用户可以马上说话
+
+    // 清除回复防抖 + 未发送文本
+    const t = this.replyDebounce.get(ws);
+    if (t) clearTimeout(t);
+    this.replyDebounce.delete(ws);
+    this.pendingFinals.delete(ws);
 
     // 重置 ASR（cleanupASR 会触发发音评测）
     this.cleanupASR(ws);
