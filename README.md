@@ -1,5 +1,6 @@
 # 英语口语教练 — SpeakCAI
 
+
 AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错和课后报告。72 小时参赛作品。
 
 > 🎬 **视频演示**：[七牛云 x XEngineer 暑期实训营 — AI 英语口语陪练](https://b23.tv/kmrZa18)
@@ -113,6 +114,15 @@ SpeakCAI/
 ## 快速开始
 
 ```bash
+# 0. 一键启动（推荐）
+# Windows 用户直接双击运行
+start.bat
+
+# 或根目录 npm（跨平台）
+npm run dev
+```
+
+```bash
 # 1. 配置密钥
 cp .env.example .env
 # 编辑 .env 填入讯飞和 DeepSeek 的 API Key
@@ -120,13 +130,16 @@ cp .env.example .env
 # 2. 安装依赖
 cd client && npm install
 cd ../server && npm install
+# 根目录也装一下 concurrently
+npm install
 
-# 3. 启动后端（终端 1）
-cd server && npm run dev
+# 3. 一键启动（二选一）
+start.bat            # Windows 双击启动
+npm run dev          # 跨平台 concurrently
 
-# 4. 启动前端（终端 2）
-cd client && npm run dev
-# 浏览器打开 http://localhost:5173
+# 4. 或分别启动
+cd server && npm run dev    # 终端 1：后端 HTTP 3000 + WS 3001
+cd client && npm run dev    # 终端 2：前端 http://localhost:5173
 ```
 
 ## 第三方依赖

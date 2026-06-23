@@ -56,7 +56,7 @@ export class DeepSeekLLM {
           temperature: 0.6,
           max_tokens: 2048,
         }),
-        signal: AbortSignal.any([this.abortController.signal, AbortSignal.timeout(30_000)]),
+        signal: this.abortController.signal,
       });
 
       if (!response.ok) {

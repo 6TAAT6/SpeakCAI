@@ -98,6 +98,9 @@ export class XunfeiTTS {
       this.ws!.send(frame);
     });
 
+    let done = false;
+    const callDone = () => { if (!done) { done = true; handler.onDone(); } };
+
     this.ws.on('message', (raw: Buffer) => {
       try {
         const msg = JSON.parse(raw.toString());
@@ -110,8 +113,9 @@ export class XunfeiTTS {
           handler.onAudio(Buffer.from(audio, 'base64'));
         }
         if (msg.data?.status === 2) {
-          this.ws?.close();
-          handler.onDone();
+          // 讯飞可能尾帧在 status:2 之后才到，延迟 onDone 等尾帧先到达
+          setTimeout(() => callDone(), 800);
+          setTimeout(() => { this.ws?.close(); this.ws = null; }, 2000);
         }
       } catch {
         // 忽略解析失败
@@ -124,6 +128,7 @@ export class XunfeiTTS {
 
     this.ws.on('close', () => {
       this.ws = null;
+      callDone();
     });
   }
 

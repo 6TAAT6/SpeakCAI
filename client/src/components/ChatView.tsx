@@ -13,6 +13,7 @@ interface Props {
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   onReplayTurn?: (audio: string, index: number) => void;
   replayIndex?: number | null;
+  replayPaused?: boolean;
 }
 
 export function ChatView(props: Props) {
@@ -35,9 +36,9 @@ export function ChatView(props: Props) {
               <button
                 className={`replay-btn${props.replayIndex === i ? ' playing' : ''}`}
                 onClick={() => props.onReplayTurn!(t.audio!, i)}
-                title="重播语音"
+                title={props.replayIndex === i && !props.replayPaused ? '暂停' : '重播语音'}
               >
-                {props.replayIndex === i ? '⏹' : '🔊'}
+                {props.replayIndex === i ? (props.replayPaused ? '▶' : '⏸') : '🔊'}
               </button>
             )}
             <p>{t.text}</p>
