@@ -368,43 +368,56 @@ export class WSServer {
 
     let englishText = '';
 
-    // Step 1: 流式生成英语 → 逐字推送给前端 + 首句立即触发 TTS
-    await llm.chat(session.getMessages(), {
-      onStream: (chunk: string) => {
-        englishText += chunk;
-        this.send(ws, { type: 'llm_stream', text: chunk });
-      },
-      onDone: () => {
-        englishText = englishText.trim();
-        if (!englishText) {
-          this.send(ws, { type: 'llm_done' });
-          return;
-        }
+    // Step 1: 流式生成英语 + 重试 + 降级兜底
+    // 尝试 2 次，失败则降级
+    for (let attempt = 0; attempt < 2; attempt++) {
+      englishText = '';
+      let done = false;
+      await llm.chat(session.getMessages(), {
+        onStream: (chunk: string) => {
+          englishText += chunk;
+          this.send(ws, { type: 'llm_stream', text: chunk });
+        },
+        onDone: () => { done = true; },
+        onError: (err: Error) => {
+          console.warn(`⚠️ LLM 尝试${attempt + 1}失败: ${err.message}`);
+        },
+      });
+      if (done && englishText.trim()) break;
+      if (attempt === 0) {
+        console.warn('🔄 1秒后重试...');
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
 
-        session.addAssistantMessage(englishText);
-        addTurn(session.sessionId, 'assistant', englishText);
+    englishText = englishText.trim();
 
-        // TTS 文本截断后与字幕解耦：字幕 = TTS 文本，全文仅用于翻译
-        const ttsText = truncateForTTS(englishText, TTS_MAX_CHARS);
-        if (ttsText !== englishText) {
-          console.log(`✂️ TTS 文本截断: ${englishText.length} → ${ttsText.length} 字符`);
-        }
+    if (!englishText) {
+      const fallback = "Sorry, I didn't catch that — could you say it again?";
+      console.warn('⚠️ LLM 全部尝试失败，使用降级回复');
+      session.addAssistantMessage(fallback);
+      addTurn(session.sessionId, 'assistant', fallback);
+      this.send(ws, { type: 'llm_stream', text: fallback });
+      this.send(ws, { type: 'llm_done', text: fallback });
+      this.handleTTS(ws, fallback);
+      return;
+    }
 
-        // llm_done 带字幕文本 → 前端看到的就是听到的
-        this.send(ws, { type: 'llm_done', text: ttsText });
+    session.addAssistantMessage(englishText);
+    addTurn(session.sessionId, 'assistant', englishText);
 
-        this.handleTTS(ws, ttsText);
+    const ttsText = truncateForTTS(englishText, TTS_MAX_CHARS);
+    if (ttsText !== englishText) {
+      console.log(`✂️ TTS 文本截断: ${englishText.length} → ${ttsText.length} 字符`);
+    }
 
-        // Step 2: 延迟 400ms 后异步翻译 + 纠错（避开 DeepSeek 并发限流）
-        setTimeout(() => {
-          this.handleTranslation(ws, englishText, text, session.correctionMode);
-        }, 400);
-      },
-      onError: (err: Error) => {
-        console.error(`⚠️ LLM 错误: ${err.message}`);
-        this.send(ws, { type: 'llm_done' });
-      },
-    });
+    this.send(ws, { type: 'llm_done', text: ttsText });
+    this.handleTTS(ws, ttsText);
+
+    // Step 2: 延迟 400ms 后异步翻译 + 纠错
+    setTimeout(() => {
+      this.handleTranslation(ws, englishText, text, session.correctionMode);
+    }, 400);
   }
 
   // ---- 翻译 + 纠错（独立 LLM 调用，不阻塞 TTS）----
