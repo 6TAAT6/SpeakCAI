@@ -59,6 +59,11 @@ const PHONEME_GRAPHEME: Record<string, RegExp> = {
   hh: /\bh(?!o)/i,
 };
 
+/** 去除 ARPAbet 重音标记（尾数 0/1/2），讯飞 ISE 返回如 "iy1" 而非 "iy" */
+function stripStress(phoneme: string): string {
+  return phoneme.replace(/[012]$/, '');
+}
+
 /**
  * 给定文本和音素分数，返回每个单词的发音评分。
  * 评分 = 该单词包含的所有音素的最低分。无匹配音素返回 -1。
@@ -68,14 +73,20 @@ export function scoreWords(text: string, phoneScores: PhoneScore[]): WordScore[]
     return text.split(/\s+/).filter(Boolean).map(w => ({ word: w, score: -1, weakPhonemes: [] }));
   }
 
-  // 构建音素→分数映射
+  // 构建音素→分数映射（key 已去重音标记，同一音素取最低分）
   const scoreMap = new Map<string, number>();
   for (const ps of phoneScores) {
-    scoreMap.set(ps.phoneme, ps.score);
+    const key = stripStress(ps.phoneme);
+    const existing = scoreMap.get(key);
+    if (existing === undefined || ps.score < existing) {
+      scoreMap.set(key, ps.score);
+    }
   }
 
-  // 弱音素（分数 < 70）
-  const weakSet = new Set(phoneScores.filter(ps => ps.score < 70).map(ps => ps.phoneme));
+  // 弱音素集合（分数 < 70，key 已去重音标记）
+  const weakSet = new Set(
+    phoneScores.filter(ps => ps.score < 70).map(ps => stripStress(ps.phoneme)).filter(Boolean),
+  );
 
   const words = text.split(/(\s+)/); // 保留空格
   const result: WordScore[] = [];
@@ -94,7 +105,7 @@ export function scoreWords(text: string, phoneScores: PhoneScore[]): WordScore[]
 
     for (const [phoneme, re] of Object.entries(PHONEME_GRAPHEME)) {
       if (re.test(clean)) {
-        const score = scoreMap.get(phoneme);
+        const score = scoreMap.get(phoneme); // phoneme key 本就无重音标记
         if (score !== undefined) {
           if (minScore === -1 || score < minScore) {
             minScore = score;

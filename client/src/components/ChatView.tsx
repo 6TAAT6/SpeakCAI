@@ -1,6 +1,5 @@
 import React from 'react';
 import type { Turn } from '../types.ts';
-import { scoreWords, scoreColorClass } from '../utils/phonemes.ts';
 
 interface Props {
   turns: Turn[];
@@ -18,35 +17,11 @@ interface Props {
   onPlayTTS?: (text: string) => void;
 }
 
-/** 将文本按单词拆分为高亮片段 */
-function HighlightedText({ text, phoneScores }: { text: string; phoneScores?: Array<{ phoneme: string; score: number }> }) {
-  if (!phoneScores || phoneScores.length === 0) {
-    return <>{text}</>;
-  }
-
-  const words = scoreWords(text, phoneScores);
-
-  return (
-    <>
-      {words.map((w, i) => {
-        const cls = scoreColorClass(w.score);
-        if (cls) {
-          return (
-            <span
-              key={i}
-              className={`hl-word ${cls}`}
-              title={w.weakPhonemes.length > 0
-                ? `弱音素: ${w.weakPhonemes.map(p => `/${p}/`).join(', ')} (${w.score}分)`
-                : `${w.score}分`}
-            >
-              {w.word}
-            </span>
-          );
-        }
-        return <span key={i}>{w.word}</span>;
-      })}
-    </>
-  );
+/** 根据总分返回整句着色等级 */
+function scoreLevel(score: number): string {
+  if (score >= 80) return 'score-good';    // 绿
+  if (score >= 60) return 'score-ok';     // 黄
+  return 'score-poor';                     // 红
 }
 
 export function ChatView(props: Props) {
@@ -63,7 +38,7 @@ export function ChatView(props: Props) {
 
       {props.turns.map((t, i) => (
         <div key={i} className="turn-group">
-          <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
+          <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}${t.score !== undefined ? ` ${scoreLevel(t.score!)}` : ''}`}>
             <span className="bubble-label">{t.role === 'user' ? 'YOU' : '🤖 小T'}</span>
             {t.audio && props.onReplayTurn && (
               <button
@@ -83,19 +58,24 @@ export function ChatView(props: Props) {
                 🎧
               </button>
             )}
-            <p>
-              {t.role === 'user'
-                ? <HighlightedText text={t.text} phoneScores={t.phoneScores} />
-                : t.text
-              }
-            </p>
+            <p>{t.text}</p>
+            {t.score !== undefined && (
+              <div className="pronounce-bar">
+                <span className={`pronounce-score ${scoreLevel(t.score)}`} title={`准确:${t.accuracy} 流利:${t.fluency} 完整:${t.integrity}`}>
+                  🎯 {t.score}分
+                </span>
+                {(t.weakPhones || []).length > 0 && (
+                  <span className="pronounce-weak-tags">
+                    {t.weakPhones!.map((p, j) => (
+                      <span key={j} className="weak-phone-tag">/{p}/</span>
+                    ))}
+                    <span className="weak-phone-hint">需加强</span>
+                  </span>
+                )}
+              </div>
+            )}
             {t.translation && <p className="ai-translation">{t.translation}</p>}
           </div>
-          {t.score !== undefined && (
-            <span className="pronounce-score" title={`准确:${t.accuracy} 流利:${t.fluency}`}>
-              🎯 {t.score}分
-            </span>
-          )}
           {t.tips && (
             <div className="correction-card">
               <div className="correction-header">💡 Tips</div>

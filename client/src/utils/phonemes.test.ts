@@ -3,6 +3,19 @@ import { describe, it, expect } from 'vitest';
 import { scoreWords, scoreColorClass } from './phonemes.ts';
 
 describe('scoreWords', () => {
+  it('strips ARPAbet stress markers from phoneme names', () => {
+    // 讯飞 ISE 返回如 "iy1", "th0" 等带重音标记的音素名
+    const phoneScores = [
+      { phoneme: 'th0', score: 45 },
+      { phoneme: 'r1', score: 85 },
+    ];
+    const result = scoreWords('the', phoneScores);
+    const theWord = result.find(w => w.word.toLowerCase() === 'the');
+    expect(theWord).toBeDefined();
+    expect(theWord!.score).toBe(45);
+    expect(theWord!.weakPhonemes).toContain('th');
+  });
+
   it('returns words with score -1 when phoneScores is empty', () => {
     const result = scoreWords('hello world', []);
     expect(result).toHaveLength(2);
