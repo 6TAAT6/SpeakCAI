@@ -16,7 +16,6 @@ export interface ISEResult {
   fluencyScore: number;
   integrityScore: number;
   weakPhones: string[];
-  phoneScores: Array<{ phoneme: string; score: number }>;
 }
 
 interface PhoneScore {
@@ -145,30 +144,23 @@ export class XunfeiISE {
           }
 
           console.log('📊 ISE scores:', scores, 'phones:', phones.length);
-          const phoneScores = phones.map(p => ({ phoneme: p.phone, score: p.score }));
           handler.onResult({
             totalScore: Math.round(scores.total_score),
             accuracyScore: Math.round(scores.accuracy_score),
             fluencyScore: Math.round(scores.fluency_score),
             integrityScore: Math.round(scores.integrity_score),
             weakPhones: extractWeakPhones(phones),
-            phoneScores,
           });
         } else {
           // JSON 格式
           const inner = JSON.parse(decoded);
           const phoneScores: PhoneScore[] = Array.isArray(inner.phone_score) ? inner.phone_score : [];
-          const mapped = phoneScores.map(p => ({
-            phoneme: p.phone || p.phn || p.phoneme || '',
-            score: p.score ?? 100,
-          }));
           handler.onResult({
             totalScore: Math.round(inner.total_score ?? 0),
             accuracyScore: Math.round(inner.accuracy_score ?? 0),
             fluencyScore: Math.round(inner.fluency_score ?? 0),
             integrityScore: Math.round(inner.integrity_score ?? 0),
             weakPhones: extractWeakPhones(phoneScores),
-            phoneScores: mapped,
           });
         }
       } catch (e) {
@@ -192,7 +184,7 @@ export class XunfeiISE {
   }
 }
 
-export function extractWeakPhones(phoneScores: PhoneScore[]): string[] {
+function extractWeakPhones(phoneScores: PhoneScore[]): string[] {
   const phones: string[] = [];
   for (const p of phoneScores) {
     const name = p.phone || p.phn || p.phoneme || '';

@@ -547,11 +547,10 @@ export class WSServer {
           fluencyScore: result.fluencyScore,
           integrityScore: result.integrityScore,
           weakPhones: result.weakPhones,
-          phoneScores: result.phoneScores,
         });
         // 持久化评测结果
         const sid = this.sessionMap.get(ws)?.sessionId;
-        if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore, result.weakPhones);
+        if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore);
         // 累积发音数据供 Agent 决策（保留最近 10 条）
         const scores = this.clientScores.get(ws) || [];
         scores.push(result.totalScore);

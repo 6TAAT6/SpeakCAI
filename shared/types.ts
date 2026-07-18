@@ -61,7 +61,6 @@ export type WSMessage =
       fluencyScore: number;
       integrityScore: number;
       weakPhones: string[];
-      phoneScores?: Array<{ phoneme: string; score: number }>;
     }
 
   // 中文翻译（独立 LLM 调用后返回）

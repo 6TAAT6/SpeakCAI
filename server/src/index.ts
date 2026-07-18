@@ -10,7 +10,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WSServer } from './ws-server.ts';
-import { getSessions, getTurns, deleteSession, saveReport, getReport, getProgress, getErrorBook } from './db.ts';
+import { getSessions, getTurns, deleteSession, saveReport, getReport, getProgress } from './db.ts';
 import { closeDB } from './db.ts';
 import type { ReportRequest, LLMAnalysis } from '../../shared/types.ts';
 
@@ -225,15 +225,6 @@ app.get('/api/sessions/:id/report', (req, res) => {
 app.get('/api/progress', (_req, res) => {
   try {
     res.json(getProgress());
-  } catch (e) {
-    res.status(500).json({ error: '查询失败' });
-  }
-});
-
-// GET /api/error-book — 弱音素错题本
-app.get('/api/error-book', (_req, res) => {
-  try {
-    res.json(getErrorBook());
   } catch (e) {
     res.status(500).json({ error: '查询失败' });
   }

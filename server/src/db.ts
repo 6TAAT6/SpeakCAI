@@ -87,14 +87,9 @@ export function getDB(): Database.Database {
 
 /** 幂等迁移：补上新增的列 */
 function migrate(d: Database.Database): void {
-  const sCols = (d.pragma('table_info(sessions)') as Array<{ name: string }>).map(c => c.name);
-  if (!sCols.includes('report_json')) {
+  const cols = (d.pragma('table_info(sessions)') as Array<{ name: string }>).map(c => c.name);
+  if (!cols.includes('report_json')) {
     d.exec('ALTER TABLE sessions ADD COLUMN report_json TEXT');
-  }
-
-  const pCols = (d.pragma('table_info(pronunciations)') as Array<{ name: string }>).map(c => c.name);
-  if (!pCols.includes('weak_phonemes')) {
-    d.exec('ALTER TABLE pronunciations ADD COLUMN weak_phonemes TEXT DEFAULT \'[]\'');
   }
 }
 
@@ -160,13 +155,9 @@ export function addPronunciation(
   accuracy: number,
   fluency: number,
   integrity: number,
-  weakPhonemes?: string[],
 ): void {
   const d = getDB();
-  d.prepare('INSERT INTO pronunciations (session_id, text, total_score, accuracy_score, fluency_score, integrity_score, weak_phonemes) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-    sessionId, text, total, accuracy, fluency, integrity,
-    weakPhonemes && weakPhonemes.length > 0 ? JSON.stringify(weakPhonemes) : '[]',
-  );
+  d.prepare('INSERT INTO pronunciations (session_id, text, total_score, accuracy_score, fluency_score, integrity_score) VALUES (?, ?, ?, ?, ?, ?)').run(sessionId, text, total, accuracy, fluency, integrity);
 }
 
 export function getPronunciations(sessionId: string): PronunciationRow[] {
@@ -207,7 +198,6 @@ export interface ProgressData {
 
 export function getProgress(): ProgressData {
   const d = getDB();
-  // 按 session 聚合发音评测数据
   const rows = d.prepare(`
     SELECT
       s.session_id,
@@ -227,70 +217,5 @@ export function getProgress(): ProgressData {
     ORDER BY s.created_at ASC
   `).all() as ProgressSession[];
 
-  // 从 DB 聚合弱音素统计
-  const allPhonemes = d.prepare(
-    "SELECT weak_phonemes FROM pronunciations WHERE weak_phonemes IS NOT NULL AND weak_phonemes != '[]'"
-  ).all() as Array<{ weak_phonemes: string }>;
-  const counter = new Map<string, number>();
-  for (const row of allPhonemes) {
-    try {
-      const phones: string[] = JSON.parse(row.weak_phonemes);
-      for (const p of phones) {
-        if (p) counter.set(p, (counter.get(p) || 0) + 1);
-      }
-    } catch { /* skip malformed JSON */ }
-  }
-  const weakPhonemes = Array.from(counter.entries())
-    .map(([phoneme, count]) => ({ phoneme, count }))
-    .sort((a, b) => b.count - a.count);
-
-  return { sessions: rows, weakPhonemes };
-}
-
-// ---- 弱音素错题本 ----
-export interface ErrorBookEntry {
-  phoneme: string;
-  count: number;
-  avgScore: number;
-  lowestScore: number;
-  exampleTexts: string[];
-  lastSeen: string;
-}
-
-export function getErrorBook(): ErrorBookEntry[] {
-  const d = getDB();
-  // 查询所有带弱音素的发音记录
-  const rows = d.prepare(`
-    SELECT p.text, p.total_score, p.weak_phonemes, p.created_at
-    FROM pronunciations p
-    WHERE p.weak_phonemes IS NOT NULL AND p.weak_phonemes != '[]'
-    ORDER BY p.created_at DESC
-  `).all() as Array<{ text: string; total_score: number; weak_phonemes: string; created_at: string }>;
-
-  // 按音素聚合
-  const agg = new Map<string, { scores: number[]; texts: string[]; lastSeen: string }>();
-  for (const row of rows) {
-    try {
-      const phones: string[] = JSON.parse(row.weak_phonemes);
-      for (const p of phones) {
-        if (!p) continue;
-        const entry = agg.get(p) || { scores: [], texts: [], lastSeen: row.created_at };
-        entry.scores.push(row.total_score);
-        if (entry.texts.length < 3) entry.texts.push(row.text); // 保留最多3条例句
-        entry.lastSeen = row.created_at;
-        agg.set(p, entry);
-      }
-    } catch { /* skip */ }
-  }
-
-  return Array.from(agg.entries())
-    .map(([phoneme, data]) => ({
-      phoneme,
-      count: data.scores.length,
-      avgScore: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
-      lowestScore: Math.min(...data.scores),
-      exampleTexts: data.texts,
-      lastSeen: data.lastSeen,
-    }))
-    .sort((a, b) => b.count - a.count);
+  return { sessions: rows, weakPhonemes: [] };
 }

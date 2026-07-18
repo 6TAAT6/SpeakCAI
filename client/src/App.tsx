@@ -9,7 +9,6 @@ import { ReportAnalysis } from './components/ReportAnalysis.tsx';
 import { ChatView } from './components/ChatView.tsx';
 import { ReportView } from './components/ReportView.tsx';
 import { ProgressView } from './components/ProgressView.tsx';
-import { ErrorBook } from './components/ErrorBook.tsx';
 import { OnboardingGuide, isOnboardingDone } from './components/OnboardingGuide.tsx';
 import type { LLMAnalysis, Scene, CorrectionMode, ProgressData } from '@shared/types.ts';
 import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
@@ -332,9 +331,6 @@ export function App() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [progressError, setProgressError] = useState('');
 
-  // ---- 弱音素错题本 ----
-  const [errorBookOpen, setErrorBookOpen] = useState(false);
-
   const toggleProgress = useCallback(async () => {
     if (progressOpen) { setProgressOpen(false); return; }
     setProgressOpen(true);
@@ -346,7 +342,7 @@ export function App() {
     setHistReport(null);
     setHistReportError('');
     if (reportOpen) setReportOpen(false);
-    if (errorBookOpen) setErrorBookOpen(false);
+    if (reportOpen) setReportOpen(false);
     if (progress) return;
     setProgressLoading(true);
     try {
@@ -355,19 +351,7 @@ export function App() {
       setProgress(await r.json());
     } catch { setProgressError('网络错误'); }
     finally { setProgressLoading(false); }
-  }, [progressOpen, progress, reportOpen, errorBookOpen]);
-
-  const toggleErrorBook = useCallback(() => {
-    setErrorBookOpen(prev => !prev);
-    if (progressOpen) setProgressOpen(false);
-    if (reportOpen) setReportOpen(false);
-    // 关闭历史详情，让错题本可见
-    setSelectedSession(null);
-    setSessionTurns([]);
-    setHistReportOpen(false);
-    setHistReport(null);
-    setHistReportError('');
-  }, [progressOpen, reportOpen]);
+  }, [progressOpen, progress, reportOpen]);
 
   const toggleHistReport = useCallback(async () => {
     if (histReportOpen) { setHistReportOpen(false); return; }
@@ -614,7 +598,6 @@ export function App() {
                 fluency: lastMessage.fluencyScore,
                 integrity: lastMessage.integrityScore,
                 weakPhones: lastMessage.weakPhones,
-                phoneScores: lastMessage.phoneScores,
               };
               return copy;
             }
@@ -813,7 +796,6 @@ export function App() {
           onSelectAllIds={selectAllIds}
           onBatchDelete={batchDelete}
           onProgress={toggleProgress}
-          onErrorBook={toggleErrorBook}
         />
 
         {/* ---- 右侧主面板 ---- */}
@@ -910,8 +892,6 @@ export function App() {
                   error={progressError}
                   onClose={() => setProgressOpen(false)}
                 />
-              ) : errorBookOpen ? (
-                <ErrorBook onClose={() => setErrorBookOpen(false)} />
               ) : reportOpen ? (
                 <ReportView
                   turns={turns}
