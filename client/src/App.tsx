@@ -9,6 +9,8 @@ import { ReportAnalysis } from './components/ReportAnalysis.tsx';
 import { ChatView } from './components/ChatView.tsx';
 import { ReportView } from './components/ReportView.tsx';
 import { ProgressView } from './components/ProgressView.tsx';
+import { ErrorBook } from './components/ErrorBook.tsx';
+import { OnboardingGuide, isOnboardingDone } from './components/OnboardingGuide.tsx';
 import type { LLMAnalysis, Scene, CorrectionMode, ProgressData } from '@shared/types.ts';
 import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
 import { uint8ArrayToBase64, base64ToUint8Array } from './utils/binary.ts';
@@ -295,6 +297,9 @@ export function App() {
   const playbackOffsetRef = useRef(0);
   const pausedByUserRef = useRef(false);
   const aiWasActiveRef = useRef(false);
+  // 对比播放专用
+  const cmpChunksRef = useRef<Uint8Array[]>([]);
+  const cmpActiveRef = useRef(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const aiCurrentRef = useRef('');
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -323,6 +328,9 @@ export function App() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [progressError, setProgressError] = useState('');
 
+  // ---- 弱音素错题本 ----
+  const [errorBookOpen, setErrorBookOpen] = useState(false);
+
   const toggleProgress = useCallback(async () => {
     if (progressOpen) { setProgressOpen(false); return; }
     setProgressOpen(true);
@@ -336,6 +344,12 @@ export function App() {
     } catch { setProgressError('网络错误'); }
     finally { setProgressLoading(false); }
   }, [progressOpen, progress]);
+
+  const toggleErrorBook = useCallback(() => {
+    setErrorBookOpen(prev => !prev);
+    if (progressOpen) setProgressOpen(false);
+    if (reportOpen) setReportOpen(false);
+  }, [progressOpen, reportOpen]);
 
   const toggleHistReport = useCallback(async () => {
     if (histReportOpen) { setHistReportOpen(false); return; }
@@ -456,6 +470,16 @@ export function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** 对比播放：请求 TTS 合成用户文本，播放标准发音 */
+  const handlePlayTTS = useCallback((text: string) => {
+    // 停止之前的对比播放
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
+    activeSourceRef.current = null;
+    cmpChunksRef.current = [];
+    cmpActiveRef.current = true;
+    messagesRef.current.send({ type: 'tts_speak', text });
+  }, []);
+
   /** 重播缓存的 AI 语音 */
   const handleReplayTurn = useCallback((audioBase64: string, index: number) => {
     // 点击正在播放的同一条 → 暂停
@@ -572,6 +596,7 @@ export function App() {
                 fluency: lastMessage.fluencyScore,
                 integrity: lastMessage.integrityScore,
                 weakPhones: lastMessage.weakPhones,
+                phoneScores: lastMessage.phoneScores,
               };
               return copy;
             }
@@ -580,17 +605,38 @@ export function App() {
         });
         break;
       case 'tts_audio':
-        setTtsPlaying(true);
-        if (lastMessage.chunkIndex === 0) {
-          audioChunksRef.current = [];
-          stopAudio();
+        // 区分对比播放与主对话 TTS
+        if (cmpActiveRef.current) {
+          cmpChunksRef.current.push(base64ToUint8Array(lastMessage.data));
+        } else {
+          setTtsPlaying(true);
+          if (lastMessage.chunkIndex === 0) {
+            audioChunksRef.current = [];
+            stopAudio();
+          }
+          audioChunksRef.current.push(base64ToUint8Array(lastMessage.data));
         }
-        audioChunksRef.current.push(base64ToUint8Array(lastMessage.data));
         break;
       case 'service_error':
         setServiceError({ service: lastMessage.service, message: lastMessage.message });
         break;
       case 'tts_done': {
+        // 对比播放完成 → 直接播放，不缓存到 turn
+        if (cmpActiveRef.current) {
+          cmpActiveRef.current = false;
+          const chunks = cmpChunksRef.current;
+          cmpChunksRef.current = [];
+          if (chunks.length > 0) {
+            const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+            const merged = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+            // 直接播放，不干扰主对话音频状态
+            playPCM(merged);
+          }
+          break;
+        }
+        // 主对话 TTS
         const chunks = audioChunksRef.current;
         if (chunks.length > 0) {
           const totalLen = chunks.reduce((s, c) => s + c.length, 0);
@@ -717,6 +763,9 @@ export function App() {
   const wsReady = status === 'connected';
   const hasConv = turns.length > 0 || partialText || aiCurrent || aiStreaming;
 
+  // ---- 首次引导 ----
+  const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDone());
+
   // 选中的历史项是否有报告
   const selectedHasReport = sessions.find(s => s.session_id === selectedSession)?.has_report;
 
@@ -739,6 +788,7 @@ export function App() {
           onSelectAllIds={selectAllIds}
           onBatchDelete={batchDelete}
           onProgress={toggleProgress}
+          onErrorBook={toggleErrorBook}
         />
 
         {/* ---- 右侧主面板 ---- */}
@@ -825,6 +875,8 @@ export function App() {
                   error={progressError}
                   onClose={() => setProgressOpen(false)}
                 />
+              ) : errorBookOpen ? (
+                <ErrorBook onClose={() => setErrorBookOpen(false)} />
               ) : reportOpen ? (
                 <ReportView
                   turns={turns}
@@ -853,6 +905,7 @@ export function App() {
                   onReplayTurn={handleReplayTurn}
                   replayIndex={replayIndex}
                   replayPaused={replayPaused}
+                  onPlayTTS={handlePlayTTS}
                 />
               )}
             </>)}
@@ -875,6 +928,11 @@ export function App() {
           )}
         </div>
       </div>
+
+      {/* ---- 首次引导 ---- */}
+      {showOnboarding && (
+        <OnboardingGuide onComplete={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 }
