@@ -17,6 +17,9 @@ import { uint8ArrayToBase64, base64ToUint8Array } from './utils/binary.ts';
 
 const sceneEmoji: Record<string, string> = { daily: '💬', interview: '💼', ordering: '🍽️', meeting: '📊', travel: '✈️', shopping: '🛍️', hotel: '🏨' };
 const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练' };
+const actionEmoji: Record<string, string> = { reply: '💬', correct_prompt: '✏️', drill: '🎯', encourage: '🌟' };
+const actionLabel: Record<string, string> = { reply: '自由对话', correct_prompt: '纠错提醒', drill: '弱音素专项', encourage: '鼓励模式' };
+const difficultyLabel: Record<string, string> = { A1: '入门', A2: '基础', B1: '中级', B2: '中高级', C1: '高级' };
 
 function loadTheme(): Theme {
   const stored = localStorage.getItem('theme');
@@ -44,6 +47,7 @@ export function App() {
   const { status, sessionId, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
   const [serviceError, setServiceError] = useState<{ service: string; message: string } | null>(null);
+  const [agentPlan, setAgentPlan] = useState<{ action: string; difficulty: string; tone: string } | null>(null);
 
   // ---- 对话历史 ----
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -335,6 +339,14 @@ export function App() {
     if (progressOpen) { setProgressOpen(false); return; }
     setProgressOpen(true);
     setProgressError('');
+    // 关闭历史详情，让成长曲线可见
+    setSelectedSession(null);
+    setSessionTurns([]);
+    setHistReportOpen(false);
+    setHistReport(null);
+    setHistReportError('');
+    if (reportOpen) setReportOpen(false);
+    if (errorBookOpen) setErrorBookOpen(false);
     if (progress) return;
     setProgressLoading(true);
     try {
@@ -343,12 +355,18 @@ export function App() {
       setProgress(await r.json());
     } catch { setProgressError('网络错误'); }
     finally { setProgressLoading(false); }
-  }, [progressOpen, progress]);
+  }, [progressOpen, progress, reportOpen, errorBookOpen]);
 
   const toggleErrorBook = useCallback(() => {
     setErrorBookOpen(prev => !prev);
     if (progressOpen) setProgressOpen(false);
     if (reportOpen) setReportOpen(false);
+    // 关闭历史详情，让错题本可见
+    setSelectedSession(null);
+    setSessionTurns([]);
+    setHistReportOpen(false);
+    setHistReport(null);
+    setHistReportError('');
   }, [progressOpen, reportOpen]);
 
   const toggleHistReport = useCallback(async () => {
@@ -617,6 +635,13 @@ export function App() {
           audioChunksRef.current.push(base64ToUint8Array(lastMessage.data));
         }
         break;
+      case 'agent_plan':
+        setAgentPlan({
+          action: lastMessage.action,
+          difficulty: lastMessage.difficulty,
+          tone: lastMessage.tone,
+        });
+        break;
       case 'service_error':
         setServiceError({ service: lastMessage.service, message: lastMessage.message });
         break;
@@ -818,6 +843,16 @@ export function App() {
             <div className="sys-banner sys-banner-err">
               ❌ {serviceError.service === 'asr' ? '语音识别' : serviceError.service === 'tts' ? '语音合成' : 'AI 对话'}失败: {serviceError.message}
               <button className="sys-banner-close" onClick={() => setServiceError(null)}>✕</button>
+            </div>
+          )}
+          {agentPlan && (
+            <div className="agent-indicator">
+              <span className="agent-indicator-icon">{actionEmoji[agentPlan.action] || '🤖'}</span>
+              <span className="agent-indicator-label">{actionLabel[agentPlan.action] || agentPlan.action}</span>
+              <span className="agent-indicator-sep">·</span>
+              <span className="agent-indicator-diff">{difficultyLabel[agentPlan.difficulty] || agentPlan.difficulty}</span>
+              {agentPlan.tone === 'corrective' && <span className="agent-indicator-tag tone-corrective">纠正</span>}
+              {agentPlan.tone === 'encouraging' && <span className="agent-indicator-tag tone-encouraging">鼓励</span>}
             </div>
           )}
 

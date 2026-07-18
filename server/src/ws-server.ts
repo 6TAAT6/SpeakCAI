@@ -355,8 +355,15 @@ export class WSServer {
       const ctx = this.buildAgentContext(ws, text, session);
       const plan = this.agent.decide(ctx);
       session.setAgentPlan(plan);
-    } catch {
-      // Agent 决策失败不阻塞对话，降级为默认行为
+      // 通知前端当前 Agent 决策，供状态指示器展示
+      this.send(ws, {
+        type: 'agent_plan',
+        action: plan.action,
+        difficulty: plan.difficulty,
+        tone: plan.tone,
+      });
+    } catch (err) {
+      console.warn('⚠️ Agent 决策失败，降级为默认行为:', err);
     }
 
     let englishText = '';
