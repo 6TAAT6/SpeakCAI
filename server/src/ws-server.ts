@@ -395,8 +395,10 @@ export class WSServer {
 
         this.handleTTS(ws, ttsText);
 
-        // Step 2: 异步中文翻译 + 纠错（用完整文本 englishText，保证翻译准确）
-        this.handleTranslation(ws, englishText, text, session.correctionMode);
+        // Step 2: 延迟 400ms 后异步翻译 + 纠错（避开 DeepSeek 并发限流）
+        setTimeout(() => {
+          this.handleTranslation(ws, englishText, text, session.correctionMode);
+        }, 400);
       },
       onError: (err: Error) => {
         console.error(`⚠️ LLM 错误: ${err.message}`);

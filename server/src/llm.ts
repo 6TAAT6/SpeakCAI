@@ -128,13 +128,20 @@ export class DeepSeekLLM {
           temperature: 0.3,
           max_tokens: 512,
         }),
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(30_000),
       });
 
-      if (!response.ok) return '';
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.warn(`⚠️ 翻译 API ${response.status}: ${errText.slice(0, 100)}`);
+        return '';
+      }
       const data = await response.json() as any;
       return data?.choices?.[0]?.message?.content?.trim() || '';
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.warn(`⚠️ 翻译异常: ${err.message}`);
+      }
       return '';
     }
   }
