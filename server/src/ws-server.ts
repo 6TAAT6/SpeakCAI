@@ -215,6 +215,10 @@ export class WSServer {
         this.handleResume(ws);
         break;
 
+      case 'tts_speak':
+        this.handleTTSSpeak(ws, msg);
+        break;
+
       case 'config_update':
         this.handleConfigUpdate(ws, msg);
         break;
@@ -493,6 +497,32 @@ export class WSServer {
     });
   }
 
+  // ---- 对比播放 TTS（用户点击 🎧 按钮触发）----
+  private handleTTSSpeak(ws: WebSocket, msg: { text: string }): void {
+    const cfg = getTTSConfig();
+    if (!cfg.appId || cfg.appId === 'your_app_id') return;
+    const text = msg.text?.trim();
+    if (!text) return;
+
+    const tts = new XunfeiTTS(cfg);
+    let chunkIndex = 0;
+    tts.synthesize(text, {
+      onAudio: (chunk: Buffer) => {
+        this.send(ws, {
+          type: 'tts_audio',
+          data: chunk.toString('base64'),
+          chunkIndex: chunkIndex++,
+        });
+      },
+      onDone: () => {
+        this.send(ws, { type: 'tts_done' });
+      },
+      onError: (err: Error) => {
+        console.error(`⚠️ 对比播放 TTS 错误: ${err.message}`);
+      },
+    });
+  }
+
   // ---- 发音评测 → 讯飞 ISE ----
   private evaluatePronounce(ws: WebSocket, text: string, audio: Buffer): void {
     console.log(`🔊 ISE evaluate: text="${text.slice(0, 30)}" audio=${audio.length}B`);
@@ -509,10 +539,11 @@ export class WSServer {
           fluencyScore: result.fluencyScore,
           integrityScore: result.integrityScore,
           weakPhones: result.weakPhones,
+          phoneScores: result.phoneScores,
         });
         // 持久化评测结果
         const sid = this.sessionMap.get(ws)?.sessionId;
-        if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore);
+        if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore, result.weakPhones);
         // 累积发音数据供 Agent 决策（保留最近 10 条）
         const scores = this.clientScores.get(ws) || [];
         scores.push(result.totalScore);
