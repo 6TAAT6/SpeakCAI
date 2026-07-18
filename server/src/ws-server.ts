@@ -16,8 +16,8 @@ import type { AgentContext } from './agent.ts';
 
 // ---- 工具函数 ----
 
-/** 英语语音约 20 字符/秒，250 字符 ≈ 12.5 秒语音，给讯飞 WS 15 秒超时留足余量 */
-const TTS_MAX_CHARS = 250;
+/** 英语语音约 20 字符/秒，350 字符 ≈ 17.5 秒语音 */
+const TTS_MAX_CHARS = 350;
 
 /**
  * 截断文本到安全长度，优先在句末边界截断。
@@ -300,7 +300,7 @@ export class WSServer {
             const all = (this.pendingFinals.get(ws) || []).join(' ');
             this.pendingFinals.delete(ws);
             if (all) this.handleUserInput(ws, all);
-          }, 800));
+          }, 500));
           // 当前语音段说完 → 立即异步评测（ISE 独立连接，不阻塞 LLM/TTS）
           const segBuf = this.iseBuffer.get(ws);
           if (segBuf && segBuf.length > 0) {
@@ -368,10 +368,11 @@ export class WSServer {
 
     let englishText = '';
 
-    // Step 1: 生成英语（缓冲后一次性发送，保证字幕=TTS 文本一致）
+    // Step 1: 流式生成英语 → 逐字推送给前端 + 首句立即触发 TTS
     await llm.chat(session.getMessages(), {
       onStream: (chunk: string) => {
         englishText += chunk;
+        this.send(ws, { type: 'llm_stream', text: chunk });
       },
       onDone: () => {
         englishText = englishText.trim();
@@ -383,18 +384,18 @@ export class WSServer {
         session.addAssistantMessage(englishText);
         addTurn(session.sessionId, 'assistant', englishText);
 
-        // TTS 安全截断：讯飞 WS 约 15 秒超时，~250 字符 ≈ 12 秒语音，留足余量
-        const ttsText = truncateForTTS(englishText);
+        // TTS 文本截断后与字幕解耦：字幕 = TTS 文本，全文仅用于翻译
+        const ttsText = truncateForTTS(englishText, TTS_MAX_CHARS);
         if (ttsText !== englishText) {
           console.log(`✂️ TTS 文本截断: ${englishText.length} → ${ttsText.length} 字符`);
         }
 
-        // 字幕 = TTS 文本，保证看到的就是听到的
+        // llm_done 带字幕文本 → 前端看到的就是听到的
         this.send(ws, { type: 'llm_done', text: ttsText });
 
         this.handleTTS(ws, ttsText);
 
-        // Step 2: 异步中文翻译 + 纠错（用完整文本，保证翻译准确）
+        // Step 2: 异步中文翻译 + 纠错（用完整文本 englishText，保证翻译准确）
         this.handleTranslation(ws, englishText, text, session.correctionMode);
       },
       onError: (err: Error) => {
