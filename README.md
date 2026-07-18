@@ -1,7 +1,6 @@
 # 英语口语教练 — SpeakCAI
 
-AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错和课后报告。72 小时参赛作品。
-
+AI 英语口语陪练工具，支持场景选择、实时语音对话、发音评测、语法纠错和课后学习报告。
 
 ## 核心功能
 
@@ -55,6 +54,14 @@ AudioWorklet 256ms/帧 ─→ 讯飞 ASR 流式识别 ─→ 前端实时字幕
 
 两种模式：沉浸（课后纠正）/ 教练（追问重说，默认）
 
+## 项目亮点
+
+- **全链路实时性**：AudioWorklet → 讯飞 ASR → DeepSeek LLM → 讯飞 TTS → Web Audio API 播放，端到端延迟 < 2 秒
+- **三层纠错体系**：即时纠错 + 课后全量分析 + 量化趋势追踪，覆盖口语学习的完整闭环
+- **组件化架构**：前端 10+ 组件拆分，后端 Class 组织，前后端共享类型定义
+- **持久化存储**：SQLite 存储对话历史、发音评分、课后报告，支持历史回放和成长曲线
+- **多场景适配**：7 种对话场景 + 2 种纠错模式，可扩展的系统提示词设计
+
 ## 目录结构
 
 ```
@@ -105,7 +112,6 @@ SpeakCAI/
 ├── .editorconfig                 # 编辑器规范
 ├── .prettierrc                   # 代码格式化
 ├── eslint.config.js              # 代码规范
-├── CLAUDE.md                     # AI 助手指令
 └── start.bat                     # 一键启动脚本
 ```
 
@@ -113,14 +119,9 @@ SpeakCAI/
 
 ```bash
 # 0. 一键启动（推荐）
-# Windows 用户直接双击运行
-start.bat
+start.bat            # Windows 双击启动
+npm run dev          # 跨平台 concurrently
 
-# 或根目录 npm（跨平台）
-npm run dev
-```
-
-```bash
 # 1. 配置密钥
 cp .env.example .env
 # 编辑 .env 填入讯飞和 DeepSeek 的 API Key
@@ -128,16 +129,11 @@ cp .env.example .env
 # 2. 安装依赖
 cd client && npm install
 cd ../server && npm install
-# 根目录也装一下 concurrently
-npm install
+npm install          # 根目录 concurrently
 
-# 3. 一键启动（二选一）
-start.bat            # Windows 双击启动
-npm run dev          # 跨平台 concurrently
-
-# 4. 或分别启动
-cd server && npm run dev    # 终端 1：后端 HTTP 3000 + WS 3001
-cd client && npm run dev    # 终端 2：前端 http://localhost:5173
+# 3. 或分别启动
+cd server && npm run dev    # 后端 HTTP 3000 + WS 3001
+cd client && npm run dev    # 前端 http://localhost:5173
 ```
 
 ## 第三方依赖
@@ -151,24 +147,3 @@ cd client && npm run dev    # 终端 2：前端 http://localhost:5173
 | SQLite (better-sqlite3) | 对话数据持久化 |
 | TypeScript | 类型安全 |
 | ESLint + Prettier + EditorConfig | 代码规范 |
-
-## 开发规划
-
-目前全部功能已开发完成。
-
-| 阶段 | 功能 | 状态 |
-|---|---|---|
-| 核心管道 | 项目脚手架 + WS 联通 | ✅ |
-| | 音频采集 AudioWorklet | ✅ |
-| | 讯飞实时 ASR | ✅ |
-| | 实时字幕显示 | ✅ |
-| 对话引擎 | DeepSeek 流式对话 + 双语翻译 | ✅ |
-| | 讯飞 TTS 语音合成 + 播放 | ✅ |
-| 纠错能力 | 场景选择 + 两种纠错模式 | ✅ |
-| | 讯飞 ISE 发音评测 | ✅ |
-| | 即时纠错气泡 + 严师重说 | ✅ |
-| 课后体系 | 课后总结报告（发音曲线/雷达图/弱音素/LLM 分析） | ✅ |
-| | 成长曲线量化追踪（多场对比/趋势图） | ✅ |
-| 收尾 | 对话历史（查看/回放/继续/删除） | ✅ |
-| | 深色模式 + UI 打磨 + 响应式 | ✅ |
-| | README + 视频演示 | ✅ |
