@@ -7,6 +7,17 @@ export type Scene = 'daily' | 'interview' | 'ordering' | 'meeting' | 'travel' | 
 // ---- 纠错模式 ----
 export type CorrectionMode = 'immersive' | 'coach';
 
+// ---- Agent 决策 ----
+export type AgentAction = 'reply' | 'correct_prompt' | 'drill' | 'encourage';
+
+export interface ActionPlan {
+  action: AgentAction;
+  tone: 'warm' | 'encouraging' | 'corrective' | 'playful';
+  difficulty: 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
+  focusAreas: string[];
+  preConversationHint?: string;
+}
+
 // ---- WebSocket 消息类型枚举 ----
 export type WSMessage =
   // 连接管理
@@ -50,6 +61,7 @@ export type WSMessage =
       fluencyScore: number;
       integrityScore: number;
       weakPhones: string[];
+      phoneScores?: Array<{ phoneme: string; score: number }>;
     }
 
   // 中文翻译（独立 LLM 调用后返回）
@@ -68,6 +80,9 @@ export type WSMessage =
 
   // 继续对话（打断后恢复）
   | { type: 'resume' }
+
+  // 对比播放 TTS（浏览器 → 后端）
+  | { type: 'tts_speak'; text: string }
 
   // 配置更新（浏览器 → 后端）
   | {

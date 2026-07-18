@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Turn } from '../types.ts';
+import { scoreWords, scoreColorClass } from '../utils/phonemes.ts';
 
 interface Props {
   turns: Turn[];
@@ -14,6 +15,38 @@ interface Props {
   onReplayTurn?: (audio: string, index: number) => void;
   replayIndex?: number | null;
   replayPaused?: boolean;
+  onPlayTTS?: (text: string) => void;
+}
+
+/** 将文本按单词拆分为高亮片段 */
+function HighlightedText({ text, phoneScores }: { text: string; phoneScores?: Array<{ phoneme: string; score: number }> }) {
+  if (!phoneScores || phoneScores.length === 0) {
+    return <>{text}</>;
+  }
+
+  const words = scoreWords(text, phoneScores);
+
+  return (
+    <>
+      {words.map((w, i) => {
+        const cls = scoreColorClass(w.score);
+        if (cls) {
+          return (
+            <span
+              key={i}
+              className={`hl-word ${cls}`}
+              title={w.weakPhonemes.length > 0
+                ? `弱音素: ${w.weakPhonemes.map(p => `/${p}/`).join(', ')} (${w.score}分)`
+                : `${w.score}分`}
+            >
+              {w.word}
+            </span>
+          );
+        }
+        return <span key={i}>{w.word}</span>;
+      })}
+    </>
+  );
 }
 
 export function ChatView(props: Props) {
@@ -41,7 +74,21 @@ export function ChatView(props: Props) {
                 {props.replayIndex === i ? (props.replayPaused ? '▶' : '⏸') : '🔊'}
               </button>
             )}
-            <p>{t.text}</p>
+            {t.role === 'user' && props.onPlayTTS && t.text && (
+              <button
+                className="replay-btn tts-play-btn"
+                onClick={() => props.onPlayTTS!(t.text)}
+                title="播放标准发音对比"
+              >
+                🎧
+              </button>
+            )}
+            <p>
+              {t.role === 'user'
+                ? <HighlightedText text={t.text} phoneScores={t.phoneScores} />
+                : t.text
+              }
+            </p>
             {t.translation && <p className="ai-translation">{t.translation}</p>}
           </div>
           {t.score !== undefined && (

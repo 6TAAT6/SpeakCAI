@@ -1,5 +1,5 @@
 // ===== 对话会话管理 =====
-import type { Scene, CorrectionMode } from '../../shared/types.ts';
+import type { Scene, CorrectionMode, ActionPlan } from '../../shared/types.ts';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -12,6 +12,7 @@ export class ConversationSession {
   scene: Scene;
   correctionMode: CorrectionMode;
   messages: ChatMessage[];
+  private _agentPlan: ActionPlan | null = null;
 
   constructor(
     sessionId: string,
@@ -22,7 +23,7 @@ export class ConversationSession {
     this.createdAt = new Date();
     this.scene = scene;
     this.correctionMode = correctionMode;
-    this.messages = [this.makeSystem(scene, correctionMode)];
+    this.messages = [this.makeSystem(scene, correctionMode, null)];
   }
 
   setConfig(scene: Scene, correctionMode: CorrectionMode): void {
@@ -30,7 +31,27 @@ export class ConversationSession {
     this.correctionMode = correctionMode;
     // 只更新 system prompt，保留已有对话上下文
     const userMsgs = this.messages.filter((m) => m.role !== 'system');
-    this.messages = [this.makeSystem(scene, correctionMode), ...userMsgs];
+    this.messages = [this.makeSystem(scene, correctionMode, this._agentPlan), ...userMsgs];
+  }
+
+  /** 注入 Agent 决策结果，下次 getMessages 时系统提示词自动生效 */
+  setAgentPlan(plan: ActionPlan): void {
+    this._agentPlan = plan;
+    // 热更新 system prompt 中的 Agent 指令（保留已有对话）
+    const userMsgs = this.messages.filter((m) => m.role !== 'system');
+    this.messages = [this.makeSystem(this.scene, this.correctionMode, plan), ...userMsgs];
+  }
+
+  get agentPlan(): ActionPlan | null {
+    return this._agentPlan;
+  }
+
+  /** 获取上一轮 AI 回复文本（Agent 决策用） */
+  getLastAssistantText(): string | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'assistant') return this.messages[i].content;
+    }
+    return undefined;
   }
 
   addUserMessage(text: string): void {
@@ -65,20 +86,51 @@ export class ConversationSession {
     return this.messages.filter((m) => m.role === 'user').length;
   }
 
-  private makeSystem(scene: Scene, _mode: CorrectionMode): ChatMessage {
+  private makeSystem(scene: Scene, _mode: CorrectionMode, plan: ActionPlan | null): ChatMessage {
     const hour = new Date().getHours();
     const partOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+    const base = [
+      SCENE_PROMPTS[scene],
+      `The current time is ${partOfDay}. You may acknowledge this naturally in your greeting — but do NOT say "Good morning/afternoon/evening" verbatim every time. Vary your openings.`,
+      '',
+      IDENTITY_RULES,
+      '',
+      QUALITY_RULES,
+    ];
+
+    // Agent 指令注入（训练指令：告诉 LLM 本轮的教学策略）
+    if (plan) {
+      base.push(
+        '',
+        '=== COACHING DIRECTIVE FOR THIS TURN ===',
+        `Difficulty level: ${plan.difficulty}. ${this.difficultyHint(plan.difficulty)}`,
+        plan.action === 'correct_prompt'
+          ? 'After your reply, briefly mention ONE area the student could improve. Be kind and encouraging.'
+          : '',
+        plan.action === 'drill' && plan.focusAreas.length > 0
+          ? `The student needs practice with these sounds: ${plan.focusAreas.join(', ')}. If natural, use a word with one of these sounds.`
+          : '',
+        plan.action === 'encourage'
+          ? 'The student is progressing well. Offer genuine praise and keep the conversation flowing.'
+          : '',
+      );
+    }
+
     return {
       role: 'system',
-      content: [
-        SCENE_PROMPTS[scene],
-        `The current time is ${partOfDay}. You may acknowledge this naturally in your greeting — but do NOT say "Good morning/afternoon/evening" verbatim every time. Vary your openings.`,
-        '',
-        IDENTITY_RULES,
-        '',
-        QUALITY_RULES,
-      ].join('\n'),
+      content: base.filter(Boolean).join('\n'),
     };
+  }
+
+  private difficultyHint(d: string): string {
+    const map: Record<string, string> = {
+      A1: 'Use very simple vocabulary and short sentences.',
+      A2: 'Use basic vocabulary. Keep sentences straightforward.',
+      B1: 'Use everyday English with natural sentence length.',
+      B2: 'Use moderately advanced vocabulary and varied structures.',
+      C1: 'Use rich vocabulary and sophisticated expressions freely.',
+    };
+    return map[d] || '';
   }
 }
 
