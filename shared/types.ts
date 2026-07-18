@@ -7,6 +7,17 @@ export type Scene = 'daily' | 'interview' | 'ordering' | 'meeting' | 'travel' | 
 // ---- 纠错模式 ----
 export type CorrectionMode = 'immersive' | 'coach';
 
+// ---- Agent 决策 ----
+export type AgentAction = 'reply' | 'correct_prompt' | 'drill' | 'encourage';
+
+export interface ActionPlan {
+  action: AgentAction;
+  tone: 'warm' | 'encouraging' | 'corrective' | 'playful';
+  difficulty: 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
+  focusAreas: string[];
+  preConversationHint?: string;
+}
+
 // ---- WebSocket 消息类型枚举 ----
 export type WSMessage =
   // 连接管理

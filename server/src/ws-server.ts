@@ -11,6 +11,8 @@ import type { TTSConfig } from './tts.ts';
 import { XunfeiISE } from './pronounce.ts';
 import type { ISEConfig } from './pronounce.ts';
 import { createSession, updateSessionConfig, endSession, resumeSession, addTurn, addPronunciation } from './db.ts';
+import { ConversationAgent } from './agent.ts';
+import type { AgentContext } from './agent.ts';
 
 // ---- 工具函数 ----
 
@@ -93,6 +95,11 @@ export class WSServer {
   private iseBuffer: Map<WebSocket, Buffer[]> = new Map();
   // TTS 播放期间屏蔽回声 ASR：合成时设 Infinity，前端播完发 tts_playback_done 解除
   private ttsActiveUntil: Map<WebSocket, number> = new Map();
+  // ConversationAgent — 单实例，所有客户端共用（纯计算，无状态）
+  private agent = new ConversationAgent();
+  // 每客户端累积的发音分数 + 薄弱音素（供 Agent 决策用）
+  private clientScores: Map<WebSocket, number[]> = new Map();
+  private clientWeakPhones: Map<WebSocket, string[]> = new Map();
   // 回复防抖：用户停 800ms 后才触发 AI，避免口误停顿被抢话
   private replyDebounce: Map<WebSocket, ReturnType<typeof setTimeout>> = new Map();
   private pendingFinals: Map<WebSocket, string[]> = new Map();
@@ -157,6 +164,8 @@ export class WSServer {
         if (t) clearTimeout(t);
         this.replyDebounce.delete(ws);
         this.pendingFinals.delete(ws);
+        this.clientScores.delete(ws);
+        this.clientWeakPhones.delete(ws);
       });
 
       ws.on('error', (err) => {
@@ -337,6 +346,15 @@ export class WSServer {
       addTurn(session.sessionId, 'user', text);
     }
 
+    // Agent 决策：根据发音数据 + 对话进程决定教学策略
+    try {
+      const ctx = this.buildAgentContext(ws, text, session);
+      const plan = this.agent.decide(ctx);
+      session.setAgentPlan(plan);
+    } catch {
+      // Agent 决策失败不阻塞对话，降级为默认行为
+    }
+
     let englishText = '';
 
     // Step 1: 生成英语（缓冲后一次性发送，保证字幕=TTS 文本一致）
@@ -495,6 +513,17 @@ export class WSServer {
         // 持久化评测结果
         const sid = this.sessionMap.get(ws)?.sessionId;
         if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore);
+        // 累积发音数据供 Agent 决策（保留最近 10 条）
+        const scores = this.clientScores.get(ws) || [];
+        scores.push(result.totalScore);
+        if (scores.length > 10) scores.shift();
+        this.clientScores.set(ws, scores);
+        // 累积薄弱音素
+        if (result.weakPhones.length > 0) {
+          const phones = this.clientWeakPhones.get(ws) || [];
+          phones.push(...result.weakPhones);
+          this.clientWeakPhones.set(ws, phones);
+        }
       },
       onError: () => { /* 评测失败不影响对话 */ },
     });
@@ -608,6 +637,21 @@ export class WSServer {
     console.log(
       `📜 继续会话: ${msg.sessionId.slice(0, 8)} (${msg.turns.length} 条历史)`,
     );
+  }
+
+  /** 收集 Agent 决策所需的上下文数据 */
+  private buildAgentContext(ws: WebSocket, text: string, session: ConversationSession): AgentContext {
+    return {
+      userText: text,
+      turnNumber: session.turnCount,
+      recentScores: this.clientScores.get(ws)?.slice(-5) || [],
+      recentAccuracy: [],
+      recentFluency: [],
+      weakPhones: this.clientWeakPhones.get(ws) || [],
+      correctionMode: session.correctionMode,
+      scene: session.scene,
+      lastAiText: session.getLastAssistantText(),
+    };
   }
 
   // ---- 清理 ----
