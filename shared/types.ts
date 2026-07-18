@@ -61,6 +61,7 @@ export type WSMessage =
       fluencyScore: number;
       integrityScore: number;
       weakPhones: string[];
+      phoneScores?: Array<{ phoneme: string; score: number }>;
     }
 
   // 中文翻译（独立 LLM 调用后返回）
@@ -79,6 +80,9 @@ export type WSMessage =
 
   // 继续对话（打断后恢复）
   | { type: 'resume' }
+
+  // 对比播放 TTS（浏览器 → 后端）
+  | { type: 'tts_speak'; text: string }
 
   // 配置更新（浏览器 → 后端）
   | {

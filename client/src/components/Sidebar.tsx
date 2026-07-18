@@ -26,6 +26,7 @@ interface Props {
   onSelectAllIds: (ids: string[]) => void;
   onBatchDelete: () => void;
   onProgress: () => void;
+  onErrorBook: () => void;
 }
 
 export function Sidebar(props: Props) {
@@ -39,6 +40,9 @@ export function Sidebar(props: Props) {
       </button>
       <button onClick={props.onProgress} className="sidebar-new-btn" style={{ marginTop: 4 }}>
         📈 成长曲线
+      </button>
+      <button onClick={props.onErrorBook} className="sidebar-new-btn" style={{ marginTop: 4 }}>
+        📖 错题本
       </button>
 
       {/* 批量工具栏 */}
