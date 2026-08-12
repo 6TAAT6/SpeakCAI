@@ -39,8 +39,8 @@ interface Props {
 export function TopBar(props: Props) {
   const [showSceneMenu, setShowSceneMenu] = useState(false);
 
-  const currentScene = scenes.find(s => s.key === props.scene);
-  const currentMode = modes.find(m => m.key === props.correctionMode);
+  const currentScene = scenes.find((s) => s.key === props.scene);
+  const currentMode = modes.find((m) => m.key === props.correctionMode);
 
   // 点击外部关闭场景面板
   useEffect(() => {
@@ -61,16 +61,31 @@ export function TopBar(props: Props) {
       <div className="top-bar-center">
         <div className="config-selectors">
           <div className="scene-wrap">
-            <button onClick={(e) => { e.stopPropagation(); setShowSceneMenu(!showSceneMenu); }} className="scene-trigger">
-              {currentScene?.emoji} {currentScene?.label} · {currentMode?.emoji} {currentMode?.label} ▾
+            <button
+              aria-expanded={showSceneMenu}
+              aria-haspopup="menu"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSceneMenu(!showSceneMenu);
+              }}
+              className="scene-trigger"
+            >
+              {currentScene?.emoji} {currentScene?.label} · {currentMode?.emoji}{' '}
+              {currentMode?.label} ▾
             </button>
             {showSceneMenu && (
               <div className="scene-panel">
                 <span className="scene-section-label">场景</span>
                 <div className="scene-section">
                   {scenes.map((s) => (
-                    <button key={s.key} onClick={() => props.updateConfig(s.key, props.correctionMode)}
-                      className={`scene-opt ${props.scene === s.key ? 'active' : ''}`}>
+                    <button
+                      key={s.key}
+                      onClick={() => {
+                        props.updateConfig(s.key, props.correctionMode);
+                        setShowSceneMenu(false);
+                      }}
+                      className={`scene-opt ${props.scene === s.key ? 'active' : ''}`}
+                    >
                       {s.emoji} {s.label}
                     </button>
                   ))}
@@ -79,8 +94,14 @@ export function TopBar(props: Props) {
                 <span className="scene-section-label">模式</span>
                 <div className="scene-section">
                   {modes.map((m) => (
-                    <button key={m.key} onClick={() => props.updateConfig(props.scene, m.key)}
-                      className={`scene-opt ${props.correctionMode === m.key ? 'active' : ''}`}>
+                    <button
+                      key={m.key}
+                      onClick={() => {
+                        props.updateConfig(props.scene, m.key);
+                        setShowSceneMenu(false);
+                      }}
+                      className={`scene-opt ${props.correctionMode === m.key ? 'active' : ''}`}
+                    >
                       {m.emoji} {m.label}
                     </button>
                   ))}
@@ -93,7 +114,15 @@ export function TopBar(props: Props) {
 
       <div className="top-bar-right">
         <div className="settings-wrap">
-          <button onClick={(e) => { e.stopPropagation(); props.setShowSettings(!props.showSettings); }} className="settings-btn">
+          <button
+            aria-expanded={props.showSettings}
+            aria-haspopup="menu"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.setShowSettings(!props.showSettings);
+            }}
+            className="settings-btn"
+          >
             ⚙ 设置
           </button>
           {props.showSettings && (
@@ -102,7 +131,11 @@ export function TopBar(props: Props) {
                 <span className="settings-label">字体大小</span>
                 <div className="settings-options">
                   {(Object.entries(fontSizeLabels) as [FontSize, string][]).map(([f, label]) => (
-                    <button key={f} onClick={() => props.pickFontSize(f)} className={`settings-opt ${props.fontSize === f ? 'active' : ''}`}>
+                    <button
+                      key={f}
+                      onClick={() => props.pickFontSize(f)}
+                      className={`settings-opt ${props.fontSize === f ? 'active' : ''}`}
+                    >
                       {label}
                     </button>
                   ))}
@@ -112,7 +145,11 @@ export function TopBar(props: Props) {
                 <span className="settings-label">主题模式</span>
                 <div className="settings-options">
                   {(Object.entries(themeIcons) as [Theme, string][]).map(([t, icon]) => (
-                    <button key={t} onClick={() => props.pickTheme(t)} className={`settings-opt ${props.theme === t ? 'active' : ''}`}>
+                    <button
+                      key={t}
+                      onClick={() => props.pickTheme(t)}
+                      className={`settings-opt ${props.theme === t ? 'active' : ''}`}
+                    >
                       {icon} {themeLabels[t]}
                     </button>
                   ))}
@@ -121,8 +158,13 @@ export function TopBar(props: Props) {
             </div>
           )}
         </div>
-        <span className="status-badge" style={{ color: props.statusColor }}>
+        <span
+          className="status-badge"
+          style={{ color: props.statusColor }}
+          title={props.statusText}
+        >
           {props.statusEmoji}
+          <span className="status-text">{props.statusText}</span>
         </span>
       </div>
     </header>

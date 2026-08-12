@@ -30,6 +30,7 @@ logs/
 # === 临时文件 ===
 tmp/
 temp/
+.codex-run/
 *.tmp
 
 # === 测试覆盖率 ===

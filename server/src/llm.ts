@@ -136,8 +136,16 @@ export class DeepSeekLLM {
         console.warn(`⚠️ 翻译 API ${response.status}: ${errText.slice(0, 100)}`);
         return '';
       }
-      const data = await response.json() as any;
-      return data?.choices?.[0]?.message?.content?.trim() || '';
+      const data: unknown = await response.json();
+      if (typeof data !== 'object' || data === null || !('choices' in data)) return '';
+      const choices = (data as { choices?: unknown }).choices;
+      if (!Array.isArray(choices)) return '';
+      const first: unknown = choices[0];
+      if (typeof first !== 'object' || first === null || !('message' in first)) return '';
+      const message = (first as { message?: unknown }).message;
+      if (typeof message !== 'object' || message === null || !('content' in message)) return '';
+      const content = (message as { content?: unknown }).content;
+      return typeof content === 'string' ? content.trim() : '';
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
         console.warn(`⚠️ 翻译异常: ${err.message}`);
