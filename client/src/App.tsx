@@ -1,3 +1,4 @@
+
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useWebSocket, getWsUrl } from './hooks/useWebSocket.ts';
 import { useAudioCapture } from './hooks/useAudioCapture.ts';
@@ -9,34 +10,15 @@ import { ChatView } from './components/ChatView.tsx';
 import { ReportView } from './components/ReportView.tsx';
 import { ProgressView } from './components/ProgressView.tsx';
 import { OnboardingGuide, isOnboardingDone } from './components/OnboardingGuide.tsx';
-import { Icon } from './components/Icon.tsx';
 import type { LLMAnalysis, Scene, CorrectionMode, ProgressData } from '@shared/types.ts';
 import type { Turn, Theme, FontSize, Session, TurnRow } from './types.ts';
 import { uint8ArrayToBase64, base64ToUint8Array } from './utils/binary.ts';
 
-const sceneEmoji: Record<string, string> = {
-  daily: '💬',
-  interview: '💼',
-  ordering: '🍽️',
-  meeting: '📊',
-  travel: '✈️',
-  shopping: '🛍️',
-  hotel: '🏨',
-};
+const sceneEmoji: Record<string, string> = { daily: '💬', interview: '💼', ordering: '🍽️', meeting: '📊', travel: '✈️', shopping: '🛍️', hotel: '🏨' };
 const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练' };
-const actionLabel: Record<string, string> = {
-  reply: '自由对话',
-  correct_prompt: '纠错提醒',
-  drill: '弱音素专项',
-  encourage: '鼓励模式',
-};
-const difficultyLabel: Record<string, string> = {
-  A1: '入门',
-  A2: '基础',
-  B1: '中级',
-  B2: '中高级',
-  C1: '高级',
-};
+const actionEmoji: Record<string, string> = { reply: '💬', correct_prompt: '✏️', drill: '🎯', encourage: '🌟' };
+const actionLabel: Record<string, string> = { reply: '自由对话', correct_prompt: '纠错提醒', drill: '弱音素专项', encourage: '鼓励模式' };
+const difficultyLabel: Record<string, string> = { A1: '入门', A2: '基础', B1: '中级', B2: '中高级', C1: '高级' };
 
 function loadTheme(): Theme {
   const stored = localStorage.getItem('theme');
@@ -45,12 +27,9 @@ function loadTheme(): Theme {
 }
 
 function applyTheme(theme: Theme): Theme {
-  const effective =
-    theme === 'auto'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
-      : theme;
+  const effective = theme === 'auto'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme;
   document.documentElement.setAttribute('data-theme', effective);
   return theme;
 }
@@ -66,14 +45,8 @@ function formatLocalTime(utcStr: string): string {
 export function App() {
   const { status, sessionId, messages, lastMessage } = useWebSocket(getWsUrl());
   const [frameCount, setFrameCount] = useState(0);
-  const [serviceError, setServiceError] = useState<{ service: string; message: string } | null>(
-    null,
-  );
-  const [agentPlan, setAgentPlan] = useState<{
-    action: string;
-    difficulty: string;
-    tone: string;
-  } | null>(null);
+  const [serviceError, setServiceError] = useState<{ service: string; message: string } | null>(null);
+  const [agentPlan, setAgentPlan] = useState<{ action: string; difficulty: string; tone: string } | null>(null);
 
   // ---- 对话历史 ----
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -106,11 +79,7 @@ export function App() {
     playbackOffsetRef.current = 0;
     stopAudio();
     // 通知后端创建全新会话
-    messagesRef.current.send({
-      type: 'new_session',
-      scene: sceneRef.current,
-      correctionMode: correctionModeRef.current,
-    });
+    messagesRef.current.send({ type: 'new_session', scene: sceneRef.current, correctionMode: correctionModeRef.current });
   }, []);
 
   /** 刷新侧边栏历史列表 */
@@ -118,9 +87,7 @@ export function App() {
     try {
       const r = await fetch('/api/sessions');
       setSessions(await r.json());
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   /** 点击历史项 → 加载对话详情 */
@@ -133,9 +100,7 @@ export function App() {
       const r = await fetch(`/api/sessions/${sessionId}/turns`);
       const data = await r.json();
       setSessionTurns(data);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   /** 历史详情 → 返回聊天 */
@@ -152,18 +117,17 @@ export function App() {
   const handleContinueChat = useCallback(async () => {
     const sid = selectedSession;
     if (!sid || sessionTurns.length === 0) return;
-    const sess = sessions.find((s) => s.session_id === sid);
+    const sess = sessions.find(s => s.session_id === sid);
     if (!sess) return;
     // 如果有活跃对话，先确认
-    if (turnsRef.current.length > 0 && !confirm('当前对话内容将被替换，确定继续这条历史对话吗？'))
-      return;
+    if (turnsRef.current.length > 0 && !confirm('当前对话内容将被替换，确定继续这条历史对话吗？')) return;
 
     // 把场景/模式切到旧 session 的配置
     setScene(sess.scene as Scene);
     setCorrectionMode(sess.mode as CorrectionMode);
 
     // 重建前端 turns 状态（仅文本，无发音分数/翻译等实时数据）
-    const histTurns: Turn[] = sessionTurns.map((t) => ({
+    const histTurns: Turn[] = sessionTurns.map(t => ({
       role: t.role === 'assistant' ? 'ai' : 'user',
       text: t.text,
     }));
@@ -196,7 +160,7 @@ export function App() {
       sessionId: sid,
       scene: sess.scene as Scene,
       correctionMode: sess.mode as CorrectionMode,
-      turns: sessionTurns.map((t) => ({ role: t.role as 'user' | 'assistant', text: t.text })),
+      turns: sessionTurns.map(t => ({ role: t.role as 'user' | 'assistant', text: t.text })),
     });
   }, [selectedSession, sessionTurns, sessions]);
 
@@ -208,30 +172,23 @@ export function App() {
     try {
       const r = await fetch('/api/sessions');
       setSessions(await r.json());
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, [selectedSession]);
 
-  const deleteSessionFromList = useCallback(
-    async (e: React.MouseEvent, sessionId: string) => {
-      e.stopPropagation();
-      if (!confirm('确定删除这条对话记录吗？')) return;
-      await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-      // 如果删除的是当前选中的，回到聊天
-      if (selectedSession === sessionId) {
-        setSelectedSession(null);
-        setSessionTurns([]);
-      }
-      try {
-        const r = await fetch('/api/sessions');
-        setSessions(await r.json());
-      } catch {
-        /* ignore */
-      }
-    },
-    [selectedSession],
-  );
+  const deleteSessionFromList = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (!confirm('确定删除这条对话记录吗？')) return;
+    await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    // 如果删除的是当前选中的，回到聊天
+    if (selectedSession === sessionId) {
+      setSelectedSession(null);
+      setSessionTurns([]);
+    }
+    try {
+      const r = await fetch('/api/sessions');
+      setSessions(await r.json());
+    } catch { /* ignore */ }
+  }, [selectedSession]);
 
   const toggleBatchMode = useCallback(() => {
     setBatchMode((prev) => {
@@ -249,7 +206,7 @@ export function App() {
   }, []);
 
   const selectAllIds = useCallback((allIds: string[]) => {
-    setSelectedIds((prev) => (prev.size === allIds.length ? new Set() : new Set(allIds)));
+    setSelectedIds((prev) => prev.size === allIds.length ? new Set() : new Set(allIds));
   }, []);
 
   const batchDelete = useCallback(async () => {
@@ -271,23 +228,17 @@ export function App() {
     try {
       const r = await fetch('/api/sessions');
       setSessions(await r.json());
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, [selectedIds, selectedSession]);
 
   // ---- 侧边栏加载历史列表 ----
   useEffect(() => {
     let cancelled = false;
     fetch('/api/sessions')
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setSessions(data);
-      })
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setSessions(data); })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   // ---- 深色模式 ----
@@ -299,12 +250,10 @@ export function App() {
   useEffect(() => {
     applyTheme(theme);
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      if (theme === 'auto') setTheme(applyTheme('auto'));
-    };
+    const handler = () => { if (theme === 'auto') setTheme(applyTheme('auto')); };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- 字体大小 ----
@@ -383,10 +332,7 @@ export function App() {
   const [progressError, setProgressError] = useState('');
 
   const toggleProgress = useCallback(async () => {
-    if (progressOpen) {
-      setProgressOpen(false);
-      return;
-    }
+    if (progressOpen) { setProgressOpen(false); return; }
     setProgressOpen(true);
     setProgressError('');
     // 关闭历史详情，让成长曲线可见
@@ -401,23 +347,14 @@ export function App() {
     setProgressLoading(true);
     try {
       const r = await fetch('/api/progress');
-      if (!r.ok) {
-        setProgressError('加载失败');
-        return;
-      }
+      if (!r.ok) { setProgressError('加载失败'); return; }
       setProgress(await r.json());
-    } catch {
-      setProgressError('网络错误');
-    } finally {
-      setProgressLoading(false);
-    }
+    } catch { setProgressError('网络错误'); }
+    finally { setProgressLoading(false); }
   }, [progressOpen, progress, reportOpen]);
 
   const toggleHistReport = useCallback(async () => {
-    if (histReportOpen) {
-      setHistReportOpen(false);
-      return;
-    }
+    if (histReportOpen) { setHistReportOpen(false); return; }
     setHistReportOpen(true);
     if (histReport) return;
     if (!selectedSession) return;
@@ -434,7 +371,7 @@ export function App() {
         setHistReportError(e.error || '读取失败');
         return;
       }
-      const sess = sessions.find((s) => s.session_id === selectedSession);
+      const sess = sessions.find(s => s.session_id === selectedSession);
       if (!sess || sessionTurns.length === 0) {
         setHistReportError('暂无对话数据，无法生成报告');
         return;
@@ -444,10 +381,7 @@ export function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: selectedSession,
-          turns: sessionTurns.map((t) => ({
-            role: t.role === 'assistant' ? 'ai' : 'user',
-            text: t.text,
-          })),
+          turns: sessionTurns.map(t => ({ role: t.role === 'assistant' ? 'ai' : 'user', text: t.text })),
           scene: sess.scene,
           mode: sess.mode,
         }),
@@ -474,11 +408,7 @@ export function App() {
       playbackOffsetRef.current += audioCtxRef.current.currentTime - playbackStartRef.current;
       pausedByUserRef.current = true;
     }
-    try {
-      activeSourceRef.current?.stop();
-    } catch {
-      /* noop */
-    }
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
     if (!paused) {
       audioChunksRef.current = [];
@@ -495,32 +425,25 @@ export function App() {
   const correctionModeRef = useRef(correctionMode);
   correctionModeRef.current = correctionMode;
 
-  const updateConfig = useCallback(
-    (s: typeof scene, m: typeof correctionMode) => {
-      setScene(s);
-      setCorrectionMode(m);
-      messagesRef.current.send({ type: 'config_update', payload: { scene: s, correctionMode: m } });
-      setTurns([]);
-      setAiCurrent('');
-      aiCurrentRef.current = '';
-      setAiStreaming(false);
-      setPartialText('');
-      setInterrupted(false);
-      setTtsPlaying(false);
-      setReport(null);
-      setReportOpen(false);
-      setReportError('');
-      stopAudio();
-    },
-    [stopAudio],
-  );
+  const updateConfig = useCallback((s: typeof scene, m: typeof correctionMode) => {
+    setScene(s);
+    setCorrectionMode(m);
+    messagesRef.current.send({ type: 'config_update', payload: { scene: s, correctionMode: m } });
+    setTurns([]);
+    setAiCurrent('');
+    aiCurrentRef.current = '';
+    setAiStreaming(false);
+    setPartialText('');
+    setInterrupted(false);
+    setTtsPlaying(false);
+    setReport(null);
+    setReportOpen(false);
+    setReportError('');
+    stopAudio();
+  }, [stopAudio]);
 
   const playPCM = useCallback((pcmData: Uint8Array, offsetSeconds = 0) => {
-    try {
-      activeSourceRef.current?.stop();
-    } catch {
-      /* noop */
-    }
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
     const ctx = audioCtxRef.current || new AudioContext();
     audioCtxRef.current = ctx;
@@ -546,17 +469,13 @@ export function App() {
       messagesRef.current.send({ type: 'tts_playback_done' });
     };
     source.start(0, offsetSeconds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** 对比播放：请求 TTS 合成用户文本，播放标准发音 */
   const handlePlayTTS = useCallback((text: string) => {
     // 停止之前的对比播放
-    try {
-      activeSourceRef.current?.stop();
-    } catch {
-      /* noop */
-    }
+    try { activeSourceRef.current?.stop(); } catch { /* noop */ }
     activeSourceRef.current = null;
     cmpChunksRef.current = [];
     cmpActiveRef.current = true;
@@ -564,60 +483,50 @@ export function App() {
   }, []);
 
   /** 重播缓存的 AI 语音 */
-  const handleReplayTurn = useCallback(
-    (audioBase64: string, index: number) => {
-      // 点击正在播放的同一条 → 暂停
-      if (replayIndex === index && replaySourceRef.current) {
-        const ctx = audioCtxRef.current;
-        if (ctx) {
-          replayOffsetRef.current = ctx.currentTime - (playbackStartRef.current || 0);
-          replayPausedRef.current = true;
-        }
-        try {
-          replaySourceRef.current.stop();
-        } catch {
-          /* noop */
-        }
-        replaySourceRef.current = null;
-        setReplayPaused(true);
-        return;
+  const handleReplayTurn = useCallback((audioBase64: string, index: number) => {
+    // 点击正在播放的同一条 → 暂停
+    if (replayIndex === index && replaySourceRef.current) {
+      const ctx = audioCtxRef.current;
+      if (ctx) {
+        replayOffsetRef.current = ctx.currentTime - (playbackStartRef.current || 0);
+        replayPausedRef.current = true;
       }
-      // 点击另一条或暂停后继续 → 从头或从暂停位置播放
-      const offset = replayIndex === index && replayPausedRef.current ? replayOffsetRef.current : 0;
-      try {
-        replaySourceRef.current?.stop();
-      } catch {
-        /* noop */
-      }
+      try { replaySourceRef.current.stop(); } catch { /* noop */ }
       replaySourceRef.current = null;
+      setReplayPaused(true);
+      return;
+    }
+    // 点击另一条或暂停后继续 → 从头或从暂停位置播放
+    const offset = (replayIndex === index && replayPausedRef.current)
+      ? replayOffsetRef.current : 0;
+    try { replaySourceRef.current?.stop(); } catch { /* noop */ }
+    replaySourceRef.current = null;
+    replayPausedRef.current = false;
+    replayOffsetRef.current = 0;
+    setReplayPaused(false);
+    const ctx = audioCtxRef.current || new AudioContext();
+    audioCtxRef.current = ctx;
+    const raw = base64ToUint8Array(audioBase64);
+    const samples = new Int16Array(raw.buffer);
+    const float32 = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768;
+    const buffer = ctx.createBuffer(1, samples.length, 16000);
+    buffer.copyToChannel(float32, 0);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    replaySourceRef.current = source;
+    playbackStartRef.current = ctx.currentTime - offset;
+    setReplayIndex(index);
+    source.onended = () => {
+      replaySourceRef.current = null;
+      setReplayIndex(null);
+      setReplayPaused(false);
       replayPausedRef.current = false;
       replayOffsetRef.current = 0;
-      setReplayPaused(false);
-      const ctx = audioCtxRef.current || new AudioContext();
-      audioCtxRef.current = ctx;
-      const raw = base64ToUint8Array(audioBase64);
-      const samples = new Int16Array(raw.buffer);
-      const float32 = new Float32Array(samples.length);
-      for (let i = 0; i < samples.length; i++) float32[i] = samples[i] / 32768;
-      const buffer = ctx.createBuffer(1, samples.length, 16000);
-      buffer.copyToChannel(float32, 0);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      replaySourceRef.current = source;
-      playbackStartRef.current = ctx.currentTime - offset;
-      setReplayIndex(index);
-      source.onended = () => {
-        replaySourceRef.current = null;
-        setReplayIndex(null);
-        setReplayPaused(false);
-        replayPausedRef.current = false;
-        replayOffsetRef.current = 0;
-      };
-      source.start(0, offset);
-    },
-    [replayIndex],
-  );
+    };
+    source.start(0, offset);
+  }, [replayIndex]);
 
   // ---- 自动滚动 ----
   useEffect(() => {
@@ -638,12 +547,7 @@ export function App() {
         if (text) {
           setPartialText('');
           setTurns((prev) => {
-            if (
-              prev.length > 0 &&
-              prev[prev.length - 1].role === 'user' &&
-              prev[prev.length - 1].text === text
-            )
-              return prev;
+            if (prev.length > 0 && prev[prev.length - 1].role === 'user' && prev[prev.length - 1].text === text) return prev;
             return [...prev, { role: 'user', text }];
           });
         }
@@ -734,10 +638,7 @@ export function App() {
             const totalLen = chunks.reduce((s, c) => s + c.length, 0);
             const merged = new Uint8Array(totalLen);
             let offset = 0;
-            for (const c of chunks) {
-              merged.set(c, offset);
-              offset += c.length;
-            }
+            for (const c of chunks) { merged.set(c, offset); offset += c.length; }
             // 直接播放，不干扰主对话音频状态
             playPCM(merged);
           }
@@ -749,10 +650,7 @@ export function App() {
           const totalLen = chunks.reduce((s, c) => s + c.length, 0);
           const merged = new Uint8Array(totalLen);
           let offset = 0;
-          for (const c of chunks) {
-            merged.set(c, offset);
-            offset += c.length;
-          }
+          for (const c of chunks) { merged.set(c, offset); offset += c.length; }
           audioChunksRef.current = [];
           ttsBufferRef.current = merged;
           // 缓存音频到当前 AI turn，供重播使用
@@ -777,14 +675,10 @@ export function App() {
   // ---- 状态指示器 ----
   const statusIndicator = useMemo(() => {
     switch (status) {
-      case 'connecting':
-        return { emoji: '', text: '连接中', color: '#b7791f' };
-      case 'connected':
-        return { emoji: '', text: '语音通道已就绪', color: '#008b8b' };
-      case 'disconnected':
-        return { emoji: '', text: '已断连', color: '#c24135' };
-      case 'error':
-        return { emoji: '', text: '连接错误', color: '#c24135' };
+      case 'connecting': return { emoji: '🟡', text: '连接中...', color: '#c6901a' };
+      case 'connected':  return { emoji: '🟢', text: '已就绪',   color: '#1a8c4a' };
+      case 'disconnected': return { emoji: '🔴', text: '已断连', color: '#b02828' };
+      case 'error':      return { emoji: '⚠️', text: '连接错误', color: '#b02828' };
     }
   }, [status]);
 
@@ -815,18 +709,9 @@ export function App() {
   };
 
   // ---- 音频采集 ----
-  const {
-    start,
-    stop,
-    isRecording,
-    error: captureError,
-  } = useAudioCapture({
+  const { start, stop, isRecording, error: captureError } = useAudioCapture({
     onAudioFrame: (frame) => {
-      messagesRef.current.send({
-        type: 'audio_frame',
-        data: Array.from(frame.data),
-        seq: frame.seq,
-      });
+      messagesRef.current.send({ type: 'audio_frame', data: Array.from(frame.data), seq: frame.seq });
       setFrameCount((c) => c + 1);
     },
   });
@@ -861,12 +746,7 @@ export function App() {
       const r = await fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          turns: turns.map(({ audio, ...t }) => t),
-          scene,
-          mode: correctionMode,
-        }),
+        body: JSON.stringify({ sessionId, turns: turns.map(({ audio, ...t }) => t), scene, mode: correctionMode }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({ error: '报告生成失败' }));
@@ -883,10 +763,7 @@ export function App() {
   }, [turns, scene, correctionMode, sessionId, refreshSessions]);
 
   const toggleReport = useCallback(() => {
-    if (reportOpen) {
-      setReportOpen(false);
-      return;
-    }
+    if (reportOpen) { setReportOpen(false); return; }
     setReportOpen(true);
     if (!report) generateReport();
   }, [reportOpen, report, generateReport]);
@@ -898,13 +775,10 @@ export function App() {
   const [showOnboarding, setShowOnboarding] = useState(!isOnboardingDone());
 
   // 选中的历史项是否有报告
-  const selectedHasReport = sessions.find((s) => s.session_id === selectedSession)?.has_report;
+  const selectedHasReport = sessions.find(s => s.session_id === selectedSession)?.has_report;
 
   return (
     <div className="app">
-      <a className="skip-link" href="#main-content">
-        跳到练习区
-      </a>
       <div className="app-layout">
         {/* ---- 侧边栏 ---- */}
         <Sidebar
@@ -944,77 +818,40 @@ export function App() {
           {/* ---- 连接/服务错误提示 ---- */}
           {status !== 'connected' && (
             <div className="sys-banner sys-banner-warn">
-              ⚠️ 服务器
-              {status === 'connecting'
-                ? '连接中...'
-                : status === 'disconnected'
-                  ? '已断连，正在重连...'
-                  : '连接错误'}{' '}
-              — 录音和对话功能暂时不可用
+              ⚠️ 服务器{status === 'connecting' ? '连接中...' : status === 'disconnected' ? '已断连，正在重连...' : '连接错误'} — 录音和对话功能暂时不可用
             </div>
           )}
           {serviceError && (
             <div className="sys-banner sys-banner-err">
-              ❌{' '}
-              {serviceError.service === 'asr'
-                ? '语音识别'
-                : serviceError.service === 'tts'
-                  ? '语音合成'
-                  : 'AI 对话'}
-              失败: {serviceError.message}
-              <button className="sys-banner-close" onClick={() => setServiceError(null)}>
-                ✕
-              </button>
+              ❌ {serviceError.service === 'asr' ? '语音识别' : serviceError.service === 'tts' ? '语音合成' : 'AI 对话'}失败: {serviceError.message}
+              <button className="sys-banner-close" onClick={() => setServiceError(null)}>✕</button>
             </div>
           )}
           {agentPlan && (
             <div className="agent-indicator">
-              <span className="agent-indicator-icon">
-                <Icon name="spark" size={16} />
-              </span>
-              <span className="agent-indicator-label">
-                {actionLabel[agentPlan.action] || agentPlan.action}
-              </span>
+              <span className="agent-indicator-icon">{actionEmoji[agentPlan.action] || '🤖'}</span>
+              <span className="agent-indicator-label">{actionLabel[agentPlan.action] || agentPlan.action}</span>
               <span className="agent-indicator-sep">·</span>
-              <span className="agent-indicator-diff">
-                {difficultyLabel[agentPlan.difficulty] || agentPlan.difficulty}
-              </span>
-              {agentPlan.tone === 'corrective' && (
-                <span className="agent-indicator-tag tone-corrective">纠正</span>
-              )}
-              {agentPlan.tone === 'encouraging' && (
-                <span className="agent-indicator-tag tone-encouraging">鼓励</span>
-              )}
+              <span className="agent-indicator-diff">{difficultyLabel[agentPlan.difficulty] || agentPlan.difficulty}</span>
+              {agentPlan.tone === 'corrective' && <span className="agent-indicator-tag tone-corrective">纠正</span>}
+              {agentPlan.tone === 'encouraging' && <span className="agent-indicator-tag tone-encouraging">鼓励</span>}
             </div>
           )}
 
-          <main className="chat-area" id="main-content" tabIndex={-1}>
+          <main className="chat-area">
             {/* ---- 历史对话详情 ---- */}
             {selectedSession && (
               <div className="history-detail">
                 <div className="history-detail-bar">
-                  <button onClick={goBackToChat} className="ctrl-btn">
-                    ← 返回对话
+                  <button onClick={goBackToChat} className="ctrl-btn">← 返回对话</button>
+                  <button onClick={handleContinueChat} className="ctrl-btn" disabled={sessionTurns.length === 0}>
+                    💬 继续对话
                   </button>
-                  <button
-                    onClick={handleContinueChat}
-                    className="ctrl-btn"
-                    disabled={sessionTurns.length === 0}
-                  >
-                    <Icon name="message" />
-                    继续对话
+                  <button onClick={toggleHistReport} className="ctrl-btn" disabled={histReportLoading}>
+                    {histReportOpen ? '💬 对话记录' : selectedHasReport ? '📊 学习报告' : '🧠 生成报告'}
                   </button>
-                  <button
-                    onClick={toggleHistReport}
-                    className="ctrl-btn"
-                    disabled={histReportLoading}
-                  >
-                    <Icon name={histReportOpen ? 'message' : 'chart'} />
-                    {histReportOpen ? '对话记录' : selectedHasReport ? '学习报告' : '生成报告'}
-                  </button>
-                  <button onClick={deleteSelectedSession} className="ctrl-btn danger-action">
-                    <Icon name="trash" />
-                    删除
+                  <button onClick={deleteSelectedSession} className="ctrl-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)', marginLeft: 'auto' }}>
+                    🗑 删除
                   </button>
                 </div>
 
@@ -1032,70 +869,61 @@ export function App() {
                 ) : (
                   <div className="history-detail-turns">
                     {sessionTurns.map((t) => (
-                      <div
-                        key={t.id}
-                        className={`bubble history-bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}
-                      >
+                      <div key={t.id} className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}`} style={{ maxWidth: '100%' }}>
                         <div className="bubble-header">
-                          <span className="bubble-label">
-                            {t.role === 'user' ? 'YOU · 你的表达' : 'COACH · 小T'}
-                          </span>
-                          <span className="history-turn-time">{formatLocalTime(t.created_at)}</span>
+                          <span className="bubble-label">{t.role === 'user' ? 'You' : '🤖 小T'}</span>
+                          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatLocalTime(t.created_at)}</span>
                         </div>
                         <p>{t.text}</p>
                       </div>
                     ))}
-                    {sessionTurns.length === 0 && (
-                      <p className="placeholder history-empty">该会话暂无对话记录</p>
-                    )}
+                    {sessionTurns.length === 0 && <p className="placeholder" style={{ marginTop: '10%' }}>该会话暂无对话记录</p>}
                   </div>
                 )}
               </div>
             )}
 
             {/* ---- 当前对话 / 报告 / 成长曲线 ---- */}
-            {!selectedSession && (
-              <>
-                {progressOpen ? (
-                  <ProgressView
-                    data={progress || { sessions: [], weakPhonemes: [] }}
-                    loading={progressLoading}
-                    error={progressError}
-                    onClose={() => setProgressOpen(false)}
-                  />
-                ) : reportOpen ? (
-                  <ReportView
-                    turns={turns}
-                    report={report}
-                    reportLoading={reportLoading}
-                    reportError={reportError}
-                    convoStartTime={convoStartTime}
-                    scene={scene}
-                    correctionMode={correctionMode}
-                    sceneEmoji={sceneEmoji}
-                    modeLabel={modeLabel}
-                    onClose={() => setReportOpen(false)}
-                    onRegenerate={generateReport}
-                  />
-                ) : (
-                  <ChatView
-                    turns={turns}
-                    partialText={partialText}
-                    aiCurrent={aiCurrent}
-                    aiStreaming={aiStreaming}
-                    hasConv={Boolean(hasConv)}
-                    isRecording={isRecording}
-                    wsReady={wsReady}
-                    captureError={captureError}
-                    chatEndRef={chatEndRef}
-                    onReplayTurn={handleReplayTurn}
-                    replayIndex={replayIndex}
-                    replayPaused={replayPaused}
-                    onPlayTTS={handlePlayTTS}
-                  />
-                )}
-              </>
-            )}
+            {!selectedSession && (<>
+              {progressOpen ? (
+                <ProgressView
+                  data={progress || { sessions: [], weakPhonemes: [] }}
+                  loading={progressLoading}
+                  error={progressError}
+                  onClose={() => setProgressOpen(false)}
+                />
+              ) : reportOpen ? (
+                <ReportView
+                  turns={turns}
+                  report={report}
+                  reportLoading={reportLoading}
+                  reportError={reportError}
+                  convoStartTime={convoStartTime}
+                  scene={scene}
+                  correctionMode={correctionMode}
+                  sceneEmoji={sceneEmoji}
+                  modeLabel={modeLabel}
+                  onClose={() => setReportOpen(false)}
+                  onRegenerate={generateReport}
+                />
+              ) : (
+                <ChatView
+                  turns={turns}
+                  partialText={partialText}
+                  aiCurrent={aiCurrent}
+                  aiStreaming={aiStreaming}
+                  hasConv={Boolean(hasConv)}
+                  isRecording={isRecording}
+                  wsReady={wsReady}
+                  captureError={captureError}
+                  chatEndRef={chatEndRef}
+                  onReplayTurn={handleReplayTurn}
+                  replayIndex={replayIndex}
+                  replayPaused={replayPaused}
+                  onPlayTTS={handlePlayTTS}
+                />
+              )}
+            </>)}
           </main>
 
           {/* 底栏：仅聊天模式下显示 */}
@@ -1106,9 +934,7 @@ export function App() {
               wsReady={wsReady}
               turnsLen={turns.length}
               reportOpen={reportOpen}
-              showInterrupt={
-                turns.length > 0 || Boolean(aiCurrent) || aiStreaming || ttsPlaying || interrupted
-              }
+              showInterrupt={turns.length > 0 || Boolean(aiCurrent) || aiStreaming || ttsPlaying || interrupted}
               interrupted={interrupted}
               handleRecordToggle={handleRecordToggle}
               toggleReport={toggleReport}
@@ -1119,7 +945,9 @@ export function App() {
       </div>
 
       {/* ---- 首次引导 ---- */}
-      {showOnboarding && <OnboardingGuide onComplete={() => setShowOnboarding(false)} />}
+      {showOnboarding && (
+        <OnboardingGuide onComplete={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 }
