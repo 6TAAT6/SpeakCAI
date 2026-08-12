@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import type { WSMessage } from '@shared/types.ts';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -6,7 +6,9 @@ type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 interface UseWebSocketReturn {
   status: ConnectionStatus;
   sessionId: string | null;
-  messages: { send: (msg: WSMessage) => void };
+  /** 仅在底层 WebSocket 建立新连接时递增；同一连接内新建会话不会递增。 */
+  connectionVersion: number;
+  messages: { send: (msg: WSMessage) => boolean };
   lastMessage: WSMessage | null;
 }
 
@@ -16,15 +18,17 @@ const MAX_DELAY = 30000;
 
 export function useWebSocket(url: string): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
+  const connectedSocketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const retryCountRef = useRef(0);
-  const errorOccurredRef = useRef(false);
+  const shouldReconnectRef = useRef(false);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [connectionVersion, setConnectionVersion] = useState(0);
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
 
   const connect = useCallback(() => {
-    // 防止重入：已连接或正在连接中时跳过
+    if (!shouldReconnectRef.current) return;
     if (
       wsRef.current?.readyState === WebSocket.OPEN ||
       wsRef.current?.readyState === WebSocket.CONNECTING
@@ -32,13 +36,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
       return;
     }
 
+    clearTimeout(reconnectTimerRef.current);
     setStatus('connecting');
-    errorOccurredRef.current = false;
-
     const ws = new WebSocket(url);
+    let hadError = false;
     wsRef.current = ws;
-
-    ws.onopen = () => {};
 
     ws.onmessage = (event) => {
       try {
@@ -46,56 +48,68 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         if (msg.type === 'connected') {
           setStatus('connected');
           setSessionId(msg.sessionId);
-          errorOccurredRef.current = false;
-          retryCountRef.current = 0; // 连接成功，重置重试计数
+          retryCountRef.current = 0;
+          if (connectedSocketRef.current !== ws) {
+            connectedSocketRef.current = ws;
+            setConnectionVersion((version) => version + 1);
+          }
         }
         setLastMessage(msg);
       } catch {
-        // 忽略解析失败
+        // 服务端消息格式异常时忽略，保留当前连接。
       }
     };
 
     ws.onclose = () => {
-      if (!errorOccurredRef.current) {
-        setStatus('disconnected');
-      }
+      // 旧连接晚到的 close 事件不得影响已经创建的新连接。
+      if (wsRef.current !== ws) return;
+      wsRef.current = null;
+      if (!hadError) setStatus('disconnected');
+      if (!shouldReconnectRef.current) return;
 
-      // 指数退避重连，上限 MAX_RETRIES 次
       if (retryCountRef.current < MAX_RETRIES) {
         const delay = Math.min(BASE_DELAY * 2 ** retryCountRef.current, MAX_DELAY);
-        retryCountRef.current++;
-        reconnectTimerRef.current = setTimeout(() => connect(), delay);
+        retryCountRef.current += 1;
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      } else {
+        setStatus('error');
       }
     };
 
     ws.onerror = () => {
-      errorOccurredRef.current = true;
+      hadError = true;
       setStatus('error');
       ws.close();
     };
   }, [url]);
 
-  const send = useCallback((msg: WSMessage) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg));
-    } else {
-      console.warn('WS 未就绪，消息丢弃:', msg.type);
-    }
+  const send = useCallback((msg: WSMessage): boolean => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+    wsRef.current.send(JSON.stringify(msg));
+    return true;
   }, []);
 
   useEffect(() => {
+    shouldReconnectRef.current = true;
+    retryCountRef.current = 0;
     connect();
     return () => {
+      shouldReconnectRef.current = false;
       clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
+      const ws = wsRef.current;
+      wsRef.current = null;
+      ws?.close();
     };
   }, [connect]);
 
-  return { status, sessionId, messages: { send }, lastMessage };
+  const messages = useMemo(() => ({ send }), [send]);
+  return { status, sessionId, connectionVersion, messages, lastMessage };
 }
 
-/** 根据当前页面地址动态拼接 WebSocket URL */
+/** 默认使用同源 /ws，开发环境由 Vite 代理，生产环境由反向代理转发。 */
 export function getWsUrl(): string {
+  const configured = import.meta.env.VITE_WS_URL?.trim();
+  if (configured) return configured;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:3001`;
+  return `${protocol}//${window.location.host}/ws`;
 }

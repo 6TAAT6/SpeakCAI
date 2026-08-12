@@ -1,8 +1,27 @@
+import { useState } from 'react';
 import type { Session } from '../types.ts';
 import type { Scene, CorrectionMode } from '@shared/types.ts';
 
-const sceneEmoji: Record<string, string> = { daily: '💬', interview: '💼', ordering: '🍽️', meeting: '📊', travel: '✈️', shopping: '🛍️', hotel: '🏨' };
+const sceneEmoji: Record<string, string> = {
+  daily: '💬',
+  interview: '💼',
+  ordering: '🍽️',
+  meeting: '📊',
+  travel: '✈️',
+  shopping: '🛍️',
+  hotel: '🏨',
+};
 const modeEmoji: Record<string, string> = { immersive: '🌊', coach: '🎯' };
+const sceneLabel: Record<string, string> = {
+  daily: '日常',
+  interview: '面试',
+  ordering: '点餐',
+  meeting: '会议',
+  travel: '旅游',
+  shopping: '购物',
+  hotel: '酒店',
+};
+const modeLabel: Record<string, string> = { immersive: '沉浸', coach: '教练' };
 
 function formatLocalTime(utcStr: string): string {
   const iso = utcStr.replace(' ', 'T') + 'Z';
@@ -29,7 +48,8 @@ interface Props {
 }
 
 export function Sidebar(props: Props) {
-  const allIds = props.sessions.map(s => s.session_id);
+  const allIds = props.sessions.map((s) => s.session_id);
+  const [sessionsExpanded, setSessionsExpanded] = useState(false);
 
   return (
     <aside className="sidebar">
@@ -37,37 +57,53 @@ export function Sidebar(props: Props) {
       <button onClick={props.onNewChat} className="sidebar-new-btn">
         ＋ 新建对话
       </button>
-      <button onClick={props.onProgress} className="sidebar-new-btn" style={{ marginTop: 4 }}>
+      <button onClick={props.onProgress} className="sidebar-new-btn sidebar-progress-btn">
         📈 成长曲线
       </button>
       {/* 批量工具栏 */}
       <div className="sidebar-toolbar">
         <button
-          onClick={props.onToggleBatchMode}
-          className={`sidebar-tool-btn${props.batchMode ? ' active' : ''}`}
+          type="button"
+          className="sidebar-section-toggle"
+          onClick={() => setSessionsExpanded((expanded) => !expanded)}
+          aria-expanded={sessionsExpanded}
+          aria-controls="recent-session-list"
         >
-          {props.batchMode ? '✕ 取消' : '☑ 批量'}
+          <span className="sidebar-section-title">最近</span>
+          <span className="sidebar-section-chevron" aria-hidden="true">
+            {sessionsExpanded ? '⌄' : '›'}
+          </span>
         </button>
-        {props.batchMode && allIds.length > 0 && (
-          <label className="sidebar-select-all">
-            <input
-              type="checkbox"
-              checked={props.selectedIds.size === allIds.length && allIds.length > 0}
-              onChange={() => props.onSelectAllIds(allIds)}
-            />
-            {props.selectedIds.size}/{allIds.length}
-          </label>
+        {sessionsExpanded && (
+          <>
+            <button
+              onClick={props.onToggleBatchMode}
+              className={`sidebar-tool-btn${props.batchMode ? ' active' : ''}`}
+            >
+              {props.batchMode ? '✕ 取消' : '☑ 批量'}
+            </button>
+            {props.batchMode && allIds.length > 0 && (
+              <label className="sidebar-select-all">
+                <input
+                  type="checkbox"
+                  checked={props.selectedIds.size === allIds.length && allIds.length > 0}
+                  onChange={() => props.onSelectAllIds(allIds)}
+                />
+                {props.selectedIds.size}/{allIds.length}
+              </label>
+            )}
+          </>
         )}
       </div>
 
-      {props.batchMode && props.selectedIds.size > 0 && (
+      {sessionsExpanded && props.batchMode && props.selectedIds.size > 0 && (
         <button onClick={props.onBatchDelete} className="sidebar-delete-btn">
           🗑 删除选中 ({props.selectedIds.size})
         </button>
       )}
 
       {/* 历史列表 */}
-      <div className="sidebar-list">
+      <div id="recent-session-list" className="sidebar-list" hidden={!sessionsExpanded}>
         {props.sessions.length === 0 ? (
           <p className="sidebar-empty">暂无对话记录</p>
         ) : (
@@ -75,6 +111,8 @@ export function Sidebar(props: Props) {
             return (
               <div
                 key={s.session_id}
+                role="button"
+                tabIndex={0}
                 className={`sidebar-item${props.selectedSession === s.session_id ? ' active' : ''}${props.batchMode && props.selectedIds.has(s.session_id) ? ' batch-selected' : ''}`}
                 onClick={() => {
                   if (props.batchMode) {
@@ -83,6 +121,13 @@ export function Sidebar(props: Props) {
                     props.onSelectSession(s.session_id);
                   }
                 }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  props.batchMode
+                    ? props.onToggleSelectId(s.session_id)
+                    : props.onSelectSession(s.session_id);
+                }}
               >
                 {props.batchMode && (
                   <input
@@ -90,13 +135,18 @@ export function Sidebar(props: Props) {
                     checked={props.selectedIds.has(s.session_id)}
                     onChange={() => props.onToggleSelectId(s.session_id)}
                     onClick={(e) => e.stopPropagation()}
+                    aria-label={`选择${sceneLabel[s.scene] || s.scene}练习记录`}
                     className="batch-checkbox"
                   />
                 )}
                 <div className="sidebar-item-content">
                   <div className="sidebar-item-top">
-                    <span className="sidebar-scene">{sceneEmoji[s.scene] || '❓'} {s.scene}</span>
-                    <span className="sidebar-mode">{modeEmoji[s.mode] || '❓'}</span>
+                    <span className="sidebar-scene">
+                      {sceneEmoji[s.scene] || '❓'} {sceneLabel[s.scene] || s.scene}
+                    </span>
+                    <span className="sidebar-mode">
+                      {modeEmoji[s.mode] || '❓'} {modeLabel[s.mode] || s.mode}
+                    </span>
                     {s.has_report ? <span className="sidebar-report-dot">📊</span> : null}
                   </div>
                   <span className="sidebar-date">{formatLocalTime(s.created_at)}</span>
@@ -105,6 +155,7 @@ export function Sidebar(props: Props) {
                   <button
                     onClick={(e) => props.onDeleteSession(e, s.session_id)}
                     className="sidebar-item-del"
+                    aria-label={`删除${sceneLabel[s.scene] || s.scene}练习记录`}
                     title="删除"
                   >
                     🗑

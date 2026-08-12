@@ -19,9 +19,9 @@ interface Props {
 
 /** 根据总分返回整句着色等级 */
 function scoreLevel(score: number): string {
-  if (score >= 80) return 'score-good';    // 绿
-  if (score >= 60) return 'score-ok';     // 黄
-  return 'score-poor';                     // 红
+  if (score >= 80) return 'score-good'; // 绿
+  if (score >= 60) return 'score-ok'; // 黄
+  return 'score-poor'; // 红
 }
 
 export function ChatView(props: Props) {
@@ -29,8 +29,24 @@ export function ChatView(props: Props) {
     <>
       {!props.hasConv && !props.isRecording && !props.captureError && (
         <div className="welcome-hero">
-          <div className="welcome-avatar">(¯▿¯)</div>
-          <h2 className="welcome-title">Hi! 我是小T</h2>
+          <div className="welcome-avatar" aria-hidden="true">
+            (¯▿¯)
+          </div>
+          <h2 className="welcome-title">Hi，我是小T</h2>
+          <p className="welcome-desc">先说出第一句，我会陪你一点点说得更自然。</p>
+          <button
+            type="button"
+            className="practice-prompt"
+            onClick={() => props.onPlayTTS?.('Tell me something good about today.')}
+            disabled={!props.onPlayTTS || !props.wsReady}
+            aria-label="播放示例句标准发音"
+          >
+            <span className="practice-label">试着说</span>
+            <span className="practice-sentence">“Tell me something good about today.”</span>
+            <span className="practice-play" aria-hidden="true">
+              ▶
+            </span>
+          </button>
           {!props.wsReady && <p className="welcome-hint">正在建立连接...</p>}
         </div>
       )}
@@ -38,12 +54,17 @@ export function ChatView(props: Props) {
 
       {props.turns.map((t, i) => (
         <div key={i} className="turn-group">
-          <div className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}${t.score !== undefined ? ` ${scoreLevel(t.score!)}` : ''}`}>
+          <div
+            className={`bubble ${t.role === 'user' ? 'user-bubble' : 'ai-bubble'}${t.score !== undefined ? ` ${scoreLevel(t.score!)}` : ''}`}
+          >
             <span className="bubble-label">{t.role === 'user' ? 'YOU' : '🤖 小T'}</span>
             {t.audio && props.onReplayTurn && (
               <button
                 className={`replay-btn${props.replayIndex === i ? ' playing' : ''}`}
                 onClick={() => props.onReplayTurn!(t.audio!, i)}
+                aria-label={
+                  props.replayIndex === i && !props.replayPaused ? '暂停语音' : '重播语音'
+                }
                 title={props.replayIndex === i && !props.replayPaused ? '暂停' : '重播语音'}
               >
                 {props.replayIndex === i ? (props.replayPaused ? '▶' : '⏸') : '🔊'}
@@ -53,6 +74,7 @@ export function ChatView(props: Props) {
               <button
                 className="replay-btn tts-play-btn"
                 onClick={() => props.onPlayTTS!(t.text)}
+                aria-label="播放标准发音对比"
                 title="播放标准发音对比"
               >
                 🎧
@@ -61,13 +83,18 @@ export function ChatView(props: Props) {
             <p>{t.text}</p>
             {t.score !== undefined && (
               <div className="pronounce-bar">
-                <span className={`pronounce-score ${scoreLevel(t.score)}`} title={`准确:${t.accuracy} 流利:${t.fluency} 完整:${t.integrity}`}>
+                <span
+                  className={`pronounce-score ${scoreLevel(t.score)}`}
+                  title={`准确:${t.accuracy} 流利:${t.fluency} 完整:${t.integrity}`}
+                >
                   🎯 {t.score}分
                 </span>
                 {(t.weakPhones || []).length > 0 && (
                   <span className="pronounce-weak-tags">
                     {t.weakPhones!.map((p, j) => (
-                      <span key={j} className="weak-phone-tag">/{p}/</span>
+                      <span key={j} className="weak-phone-tag">
+                        /{p}/
+                      </span>
                     ))}
                     <span className="weak-phone-hint">需加强</span>
                   </span>

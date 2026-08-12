@@ -10,14 +10,26 @@ import { XunfeiTTS } from './tts.ts';
 import type { TTSConfig } from './tts.ts';
 import { XunfeiISE } from './pronounce.ts';
 import type { ISEConfig } from './pronounce.ts';
-import { createSession, updateSessionConfig, endSession, resumeSession, addTurn, addPronunciation } from './db.ts';
+import {
+  createSession,
+  updateSessionConfig,
+  endSession,
+  resumeSession,
+  addTurn,
+  addPronunciation,
+  deleteSession,
+  getSession,
+  getTurns,
+} from './db.ts';
 import { ConversationAgent } from './agent.ts';
 import type { AgentContext } from './agent.ts';
+import { parseClientWSMessage } from './ws-message.ts';
 
 // ---- 工具函数 ----
 
 /** 英语语音约 20 字符/秒，350 字符 ≈ 17.5 秒语音 */
 const TTS_MAX_CHARS = 350;
+const VALID_SCENES = new Set(['daily', 'interview', 'ordering', 'meeting', 'travel', 'shopping', 'hotel']);
 
 /**
  * 截断文本到安全长度，优先在句末边界截断。
@@ -107,7 +119,7 @@ export class WSServer {
   constructor(private port: number) {}
 
   start(): void {
-    this.wss = new WebSocketServer({ port: this.port });
+    this.wss = new WebSocketServer({ port: this.port, maxPayload: 2 * 1024 * 1024 });
 
     this.wss.on('listening', () => {
       console.log(`✅ WebSocket 服务已启动 → ws://localhost:${this.port}`);
@@ -139,12 +151,12 @@ export class WSServer {
       this.send(ws, { type: 'connected', sessionId });
 
       ws.on('message', (raw) => {
-        try {
-          const msg = JSON.parse(raw.toString()) as WSMessage;
-          this.handleMessage(ws, msg);
-        } catch {
-          // 忽略无效 JSON
+        const msg = parseClientWSMessage(raw.toString());
+        if (!msg) {
+          console.warn('⚠️ 忽略格式无效的客户端消息');
+          return;
         }
+        this.handleMessage(ws, msg);
       });
 
       ws.on('close', () => {
@@ -153,19 +165,7 @@ export class WSServer {
           console.log(`🔌 断开连接: ${client.sessionId.slice(0, 8)}`);
           endSession(client.sessionId);
         }
-        this.clients.delete(ws);
-        this.cleanupASR(ws);
-        this.sessionMap.delete(ws);
-        this.llmMap.delete(ws);
-        this.ttsMap.get(ws)?.abort();
-        this.ttsActiveUntil.delete(ws);
-        this.ttsMap.delete(ws);
-        const t = this.replyDebounce.get(ws);
-        if (t) clearTimeout(t);
-        this.replyDebounce.delete(ws);
-        this.pendingFinals.delete(ws);
-        this.clientScores.delete(ws);
-        this.clientWeakPhones.delete(ws);
+        this.cleanupClient(ws);
       });
 
       ws.on('error', (err) => {
@@ -179,17 +179,19 @@ export class WSServer {
   }
 
   stop(): void {
-    for (const ws of [...this.asrMap.keys()]) {
-      this.cleanupASR(ws);
-    }
     for (const [ws] of this.clients) {
+      this.cleanupClient(ws);
       ws.close(1000, 'Server shutting down');
     }
     this.wss?.close();
-    this.clients.clear();
-    this.sessionMap.clear();
-    this.llmMap.clear();
-    this.ttsMap.clear();
+  }
+
+  /** REST 层用它阻止删除仍在实时写入的会话。 */
+  isSessionActive(sessionId: string): boolean {
+    for (const client of this.clients.values()) {
+      if (client.sessionId === sessionId) return true;
+    }
+    return false;
   }
 
   // ---- 消息路由 ----
@@ -275,7 +277,7 @@ export class WSServer {
         },
         onFinal: (text: string) => {
           // 清理 ASR 误识别的句首/句尾标点（语音输入不可能有标点）
-          let cleaned = text.replace(/^[.,;:!?'"()\[\]{}，。；：！？、""''（）【】…• ]+/, '').replace(/[.,;:!?'"()\[\]{}，。；：！？、""''（）【】…• ]+$/, '').trim();
+          const cleaned = text.replace(/^[.,;:!?'"()\[\]{}，。；：！？、""''（）【】…• ]+/, '').replace(/[.,;:!?'"()\[\]{}，。；：！？、""''（）【】…• ]+$/, '').trim();
           if (!cleaned) return;
 
           console.log(`✅ final: "${cleaned}"`);
@@ -344,6 +346,7 @@ export class WSServer {
 
     const session = this.sessionMap.get(ws);
     if (!session) return;
+    const sessionIdAtStart = session.sessionId;
 
     if (!isResume) {
       session.addUserMessage(text);
@@ -375,6 +378,7 @@ export class WSServer {
       let done = false;
       await llm.chat(session.getMessages(), {
         onStream: (chunk: string) => {
+          if (this.sessionMap.get(ws)?.sessionId !== sessionIdAtStart) return;
           englishText += chunk;
           this.send(ws, { type: 'llm_stream', text: chunk });
         },
@@ -391,6 +395,9 @@ export class WSServer {
     }
 
     englishText = englishText.trim();
+
+    // 用户可能在等待 LLM 时切换或恢复了另一场会话，旧请求结果必须丢弃。
+    if (this.sessionMap.get(ws)?.sessionId !== sessionIdAtStart) return;
 
     if (!englishText) {
       const fallback = "Sorry, I didn't catch that — could you say it again?";
@@ -416,6 +423,7 @@ export class WSServer {
 
     // Step 2: 延迟 400ms 后异步翻译 + 纠错
     setTimeout(() => {
+      if (this.sessionMap.get(ws)?.sessionId !== sessionIdAtStart) return;
       this.handleTranslation(ws, englishText, text, session.correctionMode);
     }, 400);
   }
@@ -565,7 +573,17 @@ export class WSServer {
         });
         // 持久化评测结果
         const sid = this.sessionMap.get(ws)?.sessionId;
-        if (sid) addPronunciation(sid, text, result.totalScore, result.accuracyScore, result.fluencyScore, result.integrityScore);
+        if (sid) {
+          addPronunciation(
+            sid,
+            text,
+            result.totalScore,
+            result.accuracyScore,
+            result.fluencyScore,
+            result.integrityScore,
+            result.weakPhones,
+          );
+        }
         // 累积发音数据供 Agent 决策（保留最近 10 条）
         const scores = this.clientScores.get(ws) || [];
         scores.push(result.totalScore);
@@ -642,6 +660,8 @@ export class WSServer {
       endSession(oldSession.sessionId);
     }
 
+    this.resetConversationPipeline(ws);
+
     // 创建新会话
     const sessionId = uuidv4();
     const session = new ConversationSession(sessionId, msg.scene, msg.correctionMode);
@@ -667,28 +687,46 @@ export class WSServer {
     ws: WebSocket,
     msg: Extract<WSMessage, { type: 'continue_session' }>,
   ): void {
-    // 重建历史上下文到当前 ConversationSession
-    const session = this.sessionMap.get(ws);
-    if (!session) return;
-
-    // 将会话 ID 切换到历史会话，确保后续 addTurn 写入正确 session
-    session.sessionId = msg.sessionId;
-    const client = this.clients.get(ws);
-    if (client) client.sessionId = msg.sessionId;
-    session.setConfig(msg.scene, msg.correctionMode);
-    for (const t of msg.turns) {
-      if (t.role === 'user') {
-        session.addUserMessage(t.text);
-      } else {
-        session.addAssistantMessage(t.text);
-      }
+    const stored = getSession(msg.sessionId);
+    if (!stored) {
+      this.send(ws, { type: 'service_error', service: 'session', message: '要继续的历史会话不存在或已删除' });
+      return;
     }
 
+    const oldSession = this.sessionMap.get(ws);
+    if (oldSession && oldSession.sessionId !== msg.sessionId) {
+      // 刚重连时服务端会先生成一个空会话；恢复成功后移除它，避免空记录累积。
+      if (oldSession.turnCount === 0) {
+        try {
+          deleteSession(oldSession.sessionId);
+        } catch (error) {
+          console.warn('⚠️ 清理重连临时会话失败:', error);
+          endSession(oldSession.sessionId);
+        }
+      }
+      else endSession(oldSession.sessionId);
+    }
+    this.resetConversationPipeline(ws);
+
+    const scene = (VALID_SCENES.has(stored.scene) ? stored.scene : 'daily') as Extract<WSMessage, { type: 'continue_session' }>['scene'];
+    const correctionMode: CorrectionMode = stored.mode === 'immersive' ? 'immersive' : 'coach';
+    const session = new ConversationSession(msg.sessionId, scene, correctionMode);
+    const storedTurns = getTurns(msg.sessionId);
+    for (const turn of storedTurns) {
+      if (turn.role === 'user') session.addUserMessage(turn.text);
+      else session.addAssistantMessage(turn.text);
+    }
+    this.sessionMap.set(ws, session);
+
+    const client = this.clients.get(ws);
+    if (client) client.sessionId = msg.sessionId;
+
     // DB 层面继续该会话
-    resumeSession(msg.sessionId, msg.scene, msg.correctionMode);
+    resumeSession(msg.sessionId, scene, correctionMode);
+    this.send(ws, { type: 'connected', sessionId: msg.sessionId });
 
     console.log(
-      `📜 继续会话: ${msg.sessionId.slice(0, 8)} (${msg.turns.length} 条历史)`,
+      `📜 继续会话: ${msg.sessionId.slice(0, 8)} (${storedTurns.length} 条历史)`,
     );
   }
 
@@ -717,6 +755,32 @@ export class WSServer {
     }
     // 停止录音时清空评测缓冲（已有文本的语音段已在 onFinal 即时评测完成）
     this.iseBuffer.set(ws, []);
+  }
+
+  /** 切换会话时停止旧会话的异步管道，并清空所有会话级教学状态。 */
+  private resetConversationPipeline(ws: WebSocket): void {
+    this.llmMap.get(ws)?.abort();
+    this.ttsMap.get(ws)?.abort();
+    this.ttsMap.delete(ws);
+    this.ttsActiveUntil.delete(ws);
+    const timer = this.replyDebounce.get(ws);
+    if (timer) clearTimeout(timer);
+    this.replyDebounce.delete(ws);
+    this.pendingFinals.delete(ws);
+    this.pendingAudio.delete(ws);
+    this.clientFrameCount.delete(ws);
+    this.clientScores.delete(ws);
+    this.clientWeakPhones.delete(ws);
+    this.cleanupASR(ws);
+    this.iseBuffer.delete(ws);
+  }
+
+  /** 彻底释放一个连接拥有的资源，close/stop 共用同一套清理逻辑。 */
+  private cleanupClient(ws: WebSocket): void {
+    this.resetConversationPipeline(ws);
+    this.clients.delete(ws);
+    this.sessionMap.delete(ws);
+    this.llmMap.delete(ws);
   }
 
   // ---- 工具方法 ----

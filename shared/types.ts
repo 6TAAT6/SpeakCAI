@@ -102,7 +102,7 @@ export type WSMessage =
     }
 
   // 服务端错误通知（后端 → 浏览器）
-  | { type: 'service_error'; service: 'asr' | 'tts' | 'llm'; message: string }
+  | { type: 'service_error'; service: 'asr' | 'tts' | 'llm' | 'session'; message: string }
 
   // Agent 决策通知（后端 → 浏览器）
   | { type: 'agent_plan'; action: string; difficulty: string; tone: string };

@@ -45,20 +45,20 @@ if not exist "%CLIENT%\node_modules" (
 )
 
 :: Check .env
-if not exist "%SERVER%\.env" (
-    echo   [WARN] server\.env not found. Please configure API keys:
+if not exist "%ROOT%.env" (
+    echo   [WARN] Project root .env not found. Please configure API keys:
     echo     XUNFEI_APP_ID / XUNFEI_API_KEY / XUNFEI_API_SECRET / DEEPSEEK_API_KEY
 )
 
 :: Step 3 - Start services
 echo [3/3] Starting services...
-start /min "SpeakCAI-Server" cmd /c "cd /d "%SERVER%" && npm run dev"
-start /min "SpeakCAI-Client" cmd /c "cd /d "%CLIENT%" && npm run dev"
+start "SpeakCAI-Server" /min cmd /d /s /c ""cd /d "%SERVER%" && call npm run dev""
+start "SpeakCAI-Client" /min cmd /d /s /c ""cd /d "%CLIENT%" && call npm run dev""
 
 echo   Backend:  http://localhost:3000
 echo   Frontend: http://localhost:5173
 echo.
 
 timeout /t 3 /nobreak >nul
-start http://localhost:5173
+start "" "http://localhost:5173"
 exit
